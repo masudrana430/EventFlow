@@ -1,257 +1,1596 @@
-# PH Healthcare System — Backend
+# Project Requirements — EventFlow
 
-REST API for a doctor-appointment platform: patients book consultations, doctors run them, admins manage the platform. This repo is the backend only.
+## 1. Overview
 
-**Stack:** Node.js · Express 5 · TypeScript · Prisma 7 · PostgreSQL · JWT auth
+EventFlow is an event-management and ticketing platform that connects event organizers with attendees.
 
-## Where the project stands today
+An organizer applies to join the platform, creates an event, publishes ticket types, and submits the event for approval. After an Admin approves the event, attendees can discover it, purchase tickets, receive QR-based digital passes, and use those passes to enter the venue.
 
-This is an early build, not the finished product. Right now the only working feature is authentication — a patient can register, log in, and fetch their own profile. Appointments, doctor schedules, payments, and everything else in [`Project Requirements.md`](./Project%20Requirements.md) is planned but not built yet.
+Organizers can monitor ticket sales, communicate with attendees, scan tickets at the entrance, manage event staff, and receive their earnings after the event is completed.
 
-Treat this README as a description of what the code *actually does today*, including its rough edges. A few are called out directly in [Known limitations](#known-limitations) further down — read that section before assuming something is broken on your end.
+Admins and Super Admins manage organizer approvals, event moderation, refunds, disputes, platform fees, user accounts, and organizer payouts.
 
-## Prerequisites
+This document defines what the system must do and the exact business rules it must follow. It is a product specification, not a database schema or API design. Database models and API endpoints should be designed afterward based on these rules.
 
-| Tool           | Version | Check with |
-| -------------- | ------- | ---------- |
-| **Node.js**    | 20+     | `node -v`  |
-| **PostgreSQL** | 14+     | `psql -V`  |
+---
 
-Any package manager works (npm, pnpm, yarn, bun). The examples below use `npm`.
+## 2. User roles
 
-## Getting started
+Five roles exist:
 
-**1. Install dependencies**
+1. Super Admin
+2. Admin
+3. Organizer
+4. Event Staff
+5. Attendee
 
-```bash
-npm install
-```
+| Role        | How they join                      | Login method             |
+| ----------- | ---------------------------------- | ------------------------ |
+| Attendee    | Registers directly                 | Email/password or Google |
+| Organizer   | Applies and waits for approval     | Email/password           |
+| Event Staff | Invited by an approved organizer   | Email/password           |
+| Admin       | Created by an Admin or Super Admin | Email/password           |
+| Super Admin | Created by another Super Admin     | Email/password           |
 
-**2. Set up your environment file**
+Google authentication is available only to Attendees.
 
-```bash
-cp .env.example .env
-```
+Organizers, Event Staff, Admins, and Super Admins always use email and password.
 
-Open `.env` and point `DATABASE_URL` at a Postgres database you can connect to:
+---
 
-```
-DATABASE_URL="postgresql://YOUR_USERNAME:YOUR_PASSWORD@localhost:5432/ph_healthcare?schema=public"
-```
+## 2.1 Role responsibilities
 
-The database doesn't need to exist beforehand — `prisma migrate dev` creates it. The other variables in `.env.example` are fine to leave as-is for local development; see [Environment variables](#environment-variables) for what each one does.
+### Attendee
 
-**3. Generate the Prisma client**
+An Attendee can:
 
-```bash
-npx prisma generate
-```
+* Browse approved and published events
+* Search and filter events
+* Purchase tickets
+* Download digital tickets
+* View QR passes
+* Transfer eligible tickets
+* Request cancellation or refund
+* Join an event waitlist
+* Submit event reviews
+* Open support disputes
+* Receive announcements and reminders
 
-Prisma writes a typed client into `src/generated/prisma`. That folder is git-ignored, so a fresh clone never has it, and almost every file under `src/` imports from it — skip this step and nothing compiles. Re-run it any time you change a file in `prisma/schema/`.
+### Organizer
 
-**4. Run the migrations**
+An Organizer can:
 
-```bash
-npx prisma migrate dev
-```
+* Create and manage events
+* Create multiple ticket types
+* Configure ticket inventory and pricing
+* Submit events for approval
+* Invite Event Staff
+* Send announcements to attendees
+* View sales and attendance analytics
+* Scan tickets
+* Respond to refund requests
+* Request payouts
+* Respond to disputes
 
-This creates the `user` and `patient` tables using the SQL already committed under `prisma/migrations/`.
+### Event Staff
 
-**5. Start the server**
+Event Staff can:
 
-```bash
-npm run dev
-```
+* View assigned events
+* Scan attendee QR codes
+* Manually search for a ticket
+* Mark an attendee as checked in
+* View basic attendance statistics
 
-You should see:
+Event Staff cannot:
 
-```
-Connected to the database successfully.
-Server is running on port 5000
-```
+* Edit event information
+* Change ticket prices
+* Issue refunds
+* Access organizer revenue
+* Invite other staff
+* Request payouts
 
-Confirm it's up:
+### Admin
 
-```bash
-curl http://localhost:5000/
-# {"success":true,"message":"Welcome to PH Healthcare System Backend"}
-```
+An Admin can:
 
-## Environment variables
+* Approve or reject organizer applications
+* Approve or reject events
+* Block or unblock Attendees
+* Block or unblock Organizers
+* Suspend events
+* Review refund disputes
+* Process organizer payouts
+* Create Admin accounts
+* Manage event categories
+* Manage platform fees
 
-`src/app/config/index.ts` is the only place `process.env` is read — application code should import `config` from there rather than reaching for `process.env` directly.
+### Super Admin
 
-| Variable                  | What it's for                                                      |
-| -------------------------- | ------------------------------------------------------------------ |
-| `NODE_ENV`                 | `development` includes the raw error and stack trace in API error responses |
-| `PORT`                     | Port the HTTP server listens on                                    |
-| `DATABASE_URL`             | Postgres connection string, used by both Prisma and the app        |
-| `JWT_ACCESS_SECRET`        | Signing key for access tokens                                      |
-| `JWT_REFRESH_SECRET`       | Signing key for refresh tokens                                     |
-| `JWT_ACCESS_EXPIRES_IN`    | Access token lifetime (e.g. `15m`, `1d`)                            |
-| `JWT_REFRESH_EXPIRES_IN`   | Refresh token lifetime                                              |
-| `BCRYPT_SALT_ROUNDS`       | Read into config but not wired up yet — password hashing currently uses a hardcoded value (see below) |
-| `BACKEND_URL`              | Read into config but not used anywhere yet                          |
-| `FRONTEND_URL`             | Added to the CORS allowlist                                        |
+A Super Admin has all Admin permissions and can additionally:
 
-There's no validation on startup: if a variable is missing, `config` simply holds `undefined` for it, and the app boots anyway. The first sign of trouble is usually a runtime error the moment that value is actually used — for `JWT_ACCESS_SECRET`, that means the very first login or registration.
+* Create Super Admin accounts
+* Block or unblock Admins
+* Block or unblock Super Admins
+* Change global platform settings
+* View administrative audit logs
 
-Before deploying anywhere, replace the JWT secrets — the ones in `.env.example` are placeholders anyone can guess:
+---
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-## Project structure
-
-```
-src/
-├── server.ts                       # connects to the DB, then starts listening
-├── app.ts                          # express app: cors, body parsing, routes, error handling
-├── generated/prisma/                # Prisma client — git-ignored, run `npx prisma generate`
-└── app/
-    ├── config/index.ts              # reads and exposes every environment variable
-    ├── lib/prisma.ts                # shared PrismaClient instance — always import this, don't `new` your own
-    ├── middleware/
-    │   ├── checkAuth.ts             # exports `auth(...roles)`, the JWT + role guard
-    │   ├── globalErrorHandler.ts    # turns thrown errors into JSON responses
-    │   └── notFound.ts              # catch-all for unmatched routes
-    ├── utils/
-    │   ├── catchAsync.ts            # wraps async route handlers so thrown errors reach the error handler
-    │   ├── jwt.ts                   # sign / verify helpers
-    │   └── sendResponse.ts          # the standard `{ success, statusCode, message, data }` envelope
-    └── module/
-        └── auth/                    # the one feature module that exists so far
-            ├── auth.route.ts
-            ├── auth.controller.ts
-            ├── auth.service.ts
-            └── auth.interface.ts
+## 2.2 Who can manage whom
 
-prisma/
-├── schema/
-│   ├── schema.prisma                # generator + datasource only
-│   ├── user.prisma
-│   ├── patient.prisma
-│   └── enums.prisma                 # Role, UserStatus, Gender
-└── migrations/                      # generated SQL, committed to git
-```
+| Action                                   | Admin | Super Admin |
+| ---------------------------------------- | ----: | ----------: |
+| Approve or reject Organizer applications |   Yes |         Yes |
+| Approve or reject events                 |   Yes |         Yes |
+| Block or unblock Attendees               |   Yes |         Yes |
+| Block or unblock Organizers              |   Yes |         Yes |
+| Suspend or restore events                |   Yes |         Yes |
+| Create an Admin                          |   Yes |         Yes |
+| Create a Super Admin                     |    No |         Yes |
+| Block or unblock an Admin                |    No |         Yes |
+| Block or unblock a Super Admin           |    No |         Yes |
+| Change global platform settings          |    No |         Yes |
+| View all administrative audit logs       |    No |         Yes |
 
-Prisma's schema is split across multiple files, wired together by `prisma.config.ts` at the repo root. That file also loads `.env` so the Prisma CLI can see `DATABASE_URL`.
+An Admin can manage platform users and content, but only a Super Admin can act on another Admin or Super Admin.
 
-**The data model:** a `User` has at most one `Patient` (1-to-1). Registering writes both rows in a single nested Prisma call. Deletes are meant to be soft — there's an `isDeleted` flag and a `deletedAt` timestamp on both models — but nothing in the codebase sets them yet; there's no delete endpoint at all right now.
+---
 
-## The API
+## 3. Accounts and authentication
 
-Base URL: `http://localhost:5000`
+### 3.1 Attendee registration
 
-| Method | Path                          | Auth required | Body                         |
-| ------ | ----------------------------- | ------------- | ----------------------------- |
-| `GET`  | `/`                            | –             | health check                  |
-| `POST` | `/api/v1/auth/register`        | –             | `name`, `email`, `password`   |
-| `POST` | `/api/v1/auth/login`           | –             | `email`, `password`           |
-| `GET`  | `/api/v1/auth/me`              | yes           | –                              |
-| `POST` | `/api/v1/auth/refresh-token`   | –             | reads the `refreshToken` cookie |
+An Attendee registers using:
 
-Every response from `sendResponse` (i.e. everything except the root route) has this shape:
+* Full name
+* Email address
+* Password
 
-```json
-{ "success": true, "statusCode": 200, "message": "...", "data": {} }
-```
+The Attendee may alternatively register with Google.
 
-### Tokens: use the response body, not the cookies
+Every direct registration creates an Attendee account. A public user cannot register directly as an Organizer, Event Staff, Admin, or Super Admin.
 
-`register` and `login` return `accessToken` and `refreshToken` two ways: in the JSON body, and as cookies. **Use the JSON body.** The cookies are set with `sameSite: "none"` but `secure: false` — that combination is invalid under the cookie spec, and modern browsers silently drop the cookie rather than send it. Grab `data.accessToken` from the response and send it yourself:
+---
 
-```bash
-curl -X POST http://localhost:5000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test Patient","email":"patient@example.com","password":"password123"}'
+### 3.2 Organizer application
 
-curl http://localhost:5000/api/v1/auth/me \
-  -H "Authorization: Bearer <accessToken from the response above>"
-```
+A person who wants to become an Organizer must complete a separate application.
 
-`Authorization` accepts either `Bearer <token>` or the raw token with no prefix.
+The application includes:
 
-## Roles and authentication
+* Full name
+* Email
+* Password
+* Phone number
+* Organization or business name
+* Organization type
+* Business address
+* National identification or business-registration document
+* Previous event-management experience
+* Website or social-media link, if available
 
-Four roles exist in the schema — `SUPER_ADMIN`, `ADMIN`, `DOCTOR`, `PATIENT` — but **registration always creates a `PATIENT`.** `registerPatient` hardcodes `Role.PATIENT` and only reads `name`, `email`, and `password` out of the request body, so sending `"role": "ADMIN"` does nothing. There's no admin module and no seed script, so the other three roles aren't reachable through the API yet. To test them, register a normal user and change their `role` directly in the database with `npx prisma studio` (opens at `http://localhost:5555`) — then log in again, since the role is baked into the token at login time and an old token keeps the old role.
+The applicant must verify their email with an OTP.
 
-`auth(...roles)`, exported from `checkAuth.ts`, is the route guard:
+After verification, the application receives a pending status.
 
-```ts
-router.get('/me', auth(Role.ADMIN, Role.DOCTOR, Role.PATIENT, Role.SUPER_ADMIN), AuthController.getMe)
-```
+The applicant cannot use Organizer features until an Admin or Super Admin approves the application.
 
-What it actually does, in order:
+---
 
-1. Reads the token from the `accessToken` cookie, falling back to the `Authorization` header.
-2. Verifies the JWT signature.
-3. Checks the role **from the token payload** against the roles the route allows.
-4. Looks the user up in the database by matching `id`, `email`, `name`, *and* `role` all at once — if any of those four have changed since the token was issued, the lookup fails and the request is rejected, even though the account still exists.
-5. Rejects the request only if the user's `status` is exactly `BLOCKED`. It does **not** check `isDeleted` or a `DELETED` status, so a soft-deleted account can still authenticate as long as `status` wasn't also set to `BLOCKED`.
+### 3.3 Email OTP verification
 
-## Known limitations
+Email OTP verification is required for:
 
-Worth knowing before you spend time debugging what looks like your own mistake:
+* Attendee registration with email and password
+* Organizer application
+* Forgot-password requests
+* Sensitive email-change requests
 
-- **Every error comes back as HTTP 500.** `globalErrorHandler` works out the "correct" status code internally but always sends the response with `500`, regardless. Read the `message` field, not the status code, to see what actually went wrong.
-- **No request validation.** Nothing checks that `email` looks like an email or that `password` meets any length requirement — Postgres and Prisma are the only things that will reject bad input, and usually not with a helpful message.
-- **`BCRYPT_SALT_ROUNDS` isn't used.** Password hashing in `auth.service.ts` calls `bcrypt.hash(password, 8)` with a hardcoded cost factor; the environment variable is read into `config` but nothing references it yet.
-- **No tests.** `npm test` is a placeholder.
+Google registration does not require OTP verification because Google has already verified the email address.
 
-## Extending this starter
+Admin, Super Admin, and Event Staff accounts do not use self-registration OTP. Their accounts are created through invitation flows.
 
-New features go under `src/app/module/<name>/` as four files with strict responsibilities:
+An OTP:
 
-| File                   | Responsibility                                                    |
-| ---------------------- | ------------------------------------------------------------------- |
-| `<name>.route.ts`      | Wires `auth(...roles)` to controller functions, exports `<Name>Routes` |
-| `<name>.controller.ts` | Reads `req.body` / `req.user`, calls the service, calls `sendResponse` |
-| `<name>.service.ts`    | All business logic and every Prisma call for the module              |
-| `<name>.interface.ts`  | The TypeScript types for the module's payloads                       |
+* Expires after 10 minutes
+* Can be used only once
+* Is invalidated when a newer OTP is generated
+* Can be resent only after a 60-second cooldown
+* Must be rate-limited to prevent abuse
 
-Then mount it in `app.ts` next to the existing line:
+---
 
-```ts
-app.use('/api/v1/doctor', DoctorRoutes)
-```
+### 3.4 Login
 
-Two rules keep the module boundaries useful rather than decorative:
+Attendees may log in with:
 
-- **Controllers never call Prisma directly**, and **services never touch `req` or `res`.** If a service needs to know who's calling it, pass it the small `{ userId, email, name, role }` shape, not the whole request.
-- **Never spread `req.body` straight into a Prisma `create`/`update`.** Destructure the exact fields you expect. With no validation layer in front of the API, that destructuring is the only thing stopping someone from sending `"role": "ADMIN"` in a request body and having it stick.
+* Email and password
+* Google
 
-## Scripts
+An Attendee who registered with email and password may later log in with Google if the Google email matches the same verified email address.
 
-```bash
-npm run dev     # start the server with auto-reload (tsx watch) — use this while developing
-npm run build   # typecheck with tsc and emit to dist/
-npm run start   # run the server once, no watching
-```
+The system must not create a duplicate account in that case.
 
-There's no `npm run generate` / `migrate` / `studio` wrapper — call Prisma's CLI directly:
+Organizers, Event Staff, Admins, and Super Admins may log in only with email and password.
 
-```bash
-npx prisma generate     # regenerate the client after editing prisma/schema/
-npx prisma migrate dev  # create + apply a migration
-npx prisma studio       # browser GUI for your data, at http://localhost:5555
-```
+A blocked account cannot log in.
 
-### A note on `npm run build`
+A pending or rejected Organizer application cannot log in as an Organizer.
 
-`npm run build` is useful for catching type errors, but its output isn't directly runnable with `node`. The codebase uses extensionless relative imports (`from './app'`), which `tsx` resolves fine but Node's native ESM loader doesn't — running `node dist/src/server.js` fails with `ERR_UNSUPPORTED_DIR_IMPORT`. That's why `npm run start` runs the TypeScript source through `tsx` rather than executing `dist/`.
+---
 
-## Troubleshooting
+### 3.5 Forgot password and reset password
 
-**`Cannot find module '.../src/generated/prisma/client'`**
-Run `npx prisma generate` — see step 3 of [Getting started](#getting-started).
+Any user who uses password authentication may request a password reset.
 
-**`Can't reach database server` / `ECONNREFUSED`**
-Postgres isn't running, or `DATABASE_URL` points somewhere it can't reach. Confirm with `pg_isready -h localhost -p 5432`.
+The process has two steps:
 
-**`P1010: User was denied access on the database`**
-The username or password in `DATABASE_URL` doesn't match a real role on your Postgres server. `psql -c '\du'` lists the roles that actually exist; `whoami` gives you your OS username, which is usually your local superuser with no password.
+1. The user submits their email and receives an OTP.
+2. The user submits the OTP and a new password.
 
-**Login or register throws instead of returning a token**
-Check that `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET` are actually set in your `.env` — `jsonwebtoken` throws if the signing secret is `undefined`, and this project doesn't validate environment variables on startup.
+The new password must satisfy the platform password policy.
+
+After a successful reset:
+
+* All existing refresh tokens for that account are revoked
+* The user must log in again
+* A password-change confirmation email is sent
+
+---
+
+### 3.6 Set password for Google Attendees
+
+An Attendee who registered through Google may not initially have a password.
+
+The Set Password feature allows that Attendee to create one.
+
+After setting a password, the Attendee may log in using either:
+
+* Google
+* Email and password
+
+This feature is available only to Attendees.
+
+---
+
+### 3.7 Change password
+
+A logged-in password-based user may change their password by submitting:
+
+* Current password
+* New password
+
+The current password must be correct.
+
+After changing the password, all other active sessions should be revoked.
+
+---
+
+### 3.8 Sessions and tokens
+
+Every successful login issues:
+
+* A short-lived access token
+* A longer-lived refresh token
+
+Both tokens are stored using secure, HTTP-only cookies.
+
+The system must support:
+
+* Token refresh
+* Logout from the current device
+* Logout from all devices
+* Refresh-token revocation
+* Session expiration
+* Detection of revoked or blocked accounts
+
+---
+
+## 4. Admin and Super Admin management
+
+Admins and Super Admins cannot self-register.
+
+An authorized Admin or Super Admin creates an account using:
+
+* Full name
+* Organization email
+* Personal email
+* Role
+* Phone number
+
+An Admin may create another Admin.
+
+Only a Super Admin may create a Super Admin.
+
+The system generates a temporary password and sends it to the new account holder’s personal email.
+
+The email contains:
+
+* Organization email
+* Temporary password
+* Login link
+* Instruction to change the password
+
+The new account receives a must-change-password flag.
+
+Until the password is changed, the user may access only:
+
+* Their profile
+* The change-password screen
+* Logout
+
+---
+
+## 5. Organizer approval
+
+Organizer applications move through these statuses:
+
+pending → approved
+
+or:
+
+pending → rejected
+
+An Admin or Super Admin reviews the application.
+
+### Approval
+
+When approved:
+
+* The Organizer account becomes active
+* The Organizer receives a welcome email
+* Organizer dashboard access becomes available
+* The Organizer may create events
+
+### Rejection
+
+When rejected:
+
+* The application stores a rejection reason
+* The applicant receives an email
+* The applicant cannot use Organizer features
+* The applicant may submit a new application after 30 days
+
+An Admin cannot approve an incomplete application.
+
+---
+
+## 6. Event creation
+
+Only an approved and active Organizer may create an event.
+
+Each event contains:
+
+* Event title
+* Short description
+* Full description
+* Event category
+* Cover image
+* Gallery images
+* Venue name
+* Venue address
+* Geographic coordinates
+* Event date
+* Event start time
+* Event end time
+* Entry opening time
+* Organizer contact information
+* Age restriction
+* Event policies
+* Refund policy
+* Ticket-sale start time
+* Ticket-sale end time
+* Maximum venue capacity
+
+---
+
+## 6.1 Event date and time rules
+
+An event must follow these rules:
+
+* The event start time must be in the future
+* The end time must be after the start time
+* Ticket sales must begin before ticket sales end
+* Ticket sales must end before the event starts
+* Entry opening time cannot be after the event start time
+* Venue capacity must be greater than zero
+* The combined ticket inventory cannot exceed venue capacity
+
+An event may span midnight.
+
+For example, an event may begin at 8:00 PM and end at 2:00 AM the following day.
+
+---
+
+## 6.2 Event lifecycle
+
+An event moves through these statuses:
+
+draft → pending_review → approved → published → ongoing → completed
+
+Other possible statuses are:
+
+* rejected
+* suspended
+* cancelled
+
+### Draft
+
+The Organizer is still preparing the event.
+
+Attendees cannot see it.
+
+### Pending review
+
+The Organizer has submitted the event for approval.
+
+The Organizer may no longer edit approval-sensitive fields while review is pending.
+
+### Approved
+
+An Admin has approved the event.
+
+The Organizer may publish it immediately or schedule publication.
+
+### Published
+
+The event is visible to Attendees.
+
+Tickets may be sold only during the configured ticket-sale period.
+
+### Ongoing
+
+The event has started.
+
+New ticket purchases are no longer allowed.
+
+Ticket scanning remains available.
+
+### Completed
+
+The event end time has passed and the Organizer has confirmed completion.
+
+The platform may begin payout processing after the dispute-hold period.
+
+---
+
+## 6.3 Event review and approval
+
+An Organizer submits a completed event for review.
+
+An Admin or Super Admin may:
+
+* Approve it
+* Reject it with a reason
+* Request changes
+
+If changes are requested:
+
+* The event returns to draft
+* The Organizer sees the requested changes
+* The Organizer edits and resubmits it
+
+Approval checks may include:
+
+* Valid Organizer identity
+* Complete venue information
+* Appropriate event category
+* Valid ticket pricing
+* No prohibited content
+* Venue capacity consistency
+* Clear refund policy
+* Valid event date and time
+
+---
+
+## 6.4 Editing an approved or published event
+
+Different fields lock at different times.
+
+| Field           | Editing rule                                         |
+| --------------- | ---------------------------------------------------- |
+| Event title     | Editable until the first ticket is sold              |
+| Category        | Editable until approval                              |
+| Event date      | Editable until the first ticket is sold              |
+| Venue           | Editable until the first ticket is sold              |
+| Ticket price    | Editable until a ticket of that type is sold         |
+| Ticket capacity | May be increased but not reduced below sold quantity |
+| Description     | Editable until event start                           |
+| Cover image     | Editable until event start                           |
+| Contact details | Editable until event completion                      |
+| Refund policy   | Locked after the first ticket sale                   |
+
+If a critical field must change after ticket sales begin, the Organizer must request an Admin-assisted event modification.
+
+Affected Attendees must be notified.
+
+---
+
+## 7. Ticket types
+
+An Organizer may create multiple ticket types for one event.
+
+Examples:
+
+* General Admission
+* VIP
+* Early Bird
+* Student
+* Group Package
+
+Each ticket type contains:
+
+* Name
+* Description
+* Price
+* Quantity
+* Maximum quantity per order
+* Sale start time
+* Sale end time
+* Transferability
+* Refund eligibility
+* Benefits
+* Visibility status
+
+---
+
+## 7.1 Ticket inventory rules
+
+The system must prevent overselling.
+
+When an Attendee begins checkout, the selected ticket quantity is temporarily reserved.
+
+A reservation:
+
+* Lasts for 10 minutes
+* Prevents other users from buying the same inventory
+* Expires automatically if payment is not completed
+* Converts into sold inventory after successful payment
+
+If payment fails or the reservation expires, the inventory becomes available again.
+
+The sum of sold and actively reserved tickets cannot exceed the ticket type’s quantity.
+
+---
+
+## 7.2 Ticket pricing rules
+
+Ticket prices cannot be negative.
+
+A free ticket has a price of zero and does not require a payment-gateway transaction.
+
+For paid tickets, the final price may include:
+
+* Base ticket price
+* Platform service fee
+* Taxes, if configured
+* Discount
+* Promotional code adjustment
+
+The checkout page must show a complete price breakdown before confirmation.
+
+---
+
+## 8. Event discovery
+
+Attendees can browse only events that are:
+
+* Approved
+* Published
+* Not suspended
+* Not cancelled
+* Not completed
+
+Attendees can search and filter by:
+
+* Event name
+* Category
+* Location
+* Date
+* Price range
+* Free or paid
+* Organizer
+* Availability
+* Popularity
+
+Search results should support:
+
+* Pagination
+* Sorting
+* Location-based discovery
+* Upcoming-events filtering
+* Recommended events
+
+A sold-out event may remain visible but must show a sold-out status.
+
+---
+
+## 9. Ticket purchase
+
+An Attendee selects:
+
+* Event
+* Ticket type
+* Quantity
+
+The system then:
+
+1. Validates inventory
+2. Creates a temporary reservation
+3. Calculates fees and discounts
+4. Creates a pending order
+5. Sends the Attendee to the payment gateway
+6. Verifies the payment result
+7. Confirms the order
+8. Generates digital tickets
+9. Emails the invoice and tickets
+
+A ticket purchase is complete only after server-side payment verification.
+
+A successful browser redirect alone is not enough to mark an order as paid.
+
+---
+
+## 9.1 Order lifecycle
+
+An order moves through these statuses:
+
+pending → paid → completed
+
+Alternative statuses include:
+
+* payment_failed
+* expired
+* partially_refunded
+* refunded
+* cancelled
+
+### Pending
+
+The checkout session exists but payment has not been verified.
+
+### Paid
+
+Payment was successfully verified and tickets were generated.
+
+### Completed
+
+The event has completed and the order has no unresolved issue.
+
+### Expired
+
+The reservation expired before successful payment.
+
+---
+
+## 9.2 Duplicate payment protection
+
+The payment-verification operation must be idempotent.
+
+If the payment gateway sends multiple callbacks for the same transaction:
+
+* The order must not be paid twice
+* Tickets must not be generated twice
+* Inventory must not be reduced twice
+* Confirmation emails must not be sent repeatedly
+
+Every payment transaction must have a unique gateway transaction ID.
+
+---
+
+## 10. Digital tickets
+
+Each purchased ticket receives:
+
+* Unique ticket number
+* Unique QR code
+* Event name
+* Ticket type
+* Attendee name
+* Event date
+* Venue
+* Order number
+* Ticket status
+
+A PDF ticket is generated and emailed to the Attendee.
+
+Tickets are also accessible from the Attendee dashboard.
+
+One order may contain multiple tickets.
+
+Each ticket must have its own unique QR code.
+
+---
+
+## 10.1 Ticket statuses
+
+A ticket may have one of these statuses:
+
+* valid
+* checked_in
+* transferred
+* cancelled
+* refunded
+* void
+
+A ticket marked checked_in cannot be checked in again.
+
+A refunded or cancelled ticket cannot be used for entry.
+
+---
+
+## 11. QR-based event check-in
+
+An Organizer or assigned Event Staff scans a ticket QR code.
+
+The system validates:
+
+* The ticket exists
+* The ticket belongs to the correct event
+* The ticket is valid
+* The event entry window is open
+* The ticket has not already been used
+* The ticket has not been cancelled or refunded
+
+If valid:
+
+* Ticket status becomes checked_in
+* Check-in time is recorded
+* Scanner identity is recorded
+* The attendance count updates in real time
+
+If invalid, the scanner sees a clear rejection reason.
+
+Examples:
+
+* Already checked in
+* Wrong event
+* Ticket cancelled
+* Ticket refunded
+* Entry window not open
+* Invalid QR code
+
+---
+
+## 11.1 Manual check-in
+
+If scanning is unavailable, authorized staff may search by:
+
+* Ticket number
+* Order number
+* Attendee email
+* Attendee name
+
+Manual check-in requires an additional confirmation step.
+
+The system records that the entry was manual rather than QR-based.
+
+---
+
+## 12. Event Staff management
+
+An Organizer may invite Event Staff using an email address.
+
+The invitation contains:
+
+* Organizer name
+* Event name
+* Invitation link
+* Temporary password or account-setup link
+* Invitation expiry time
+
+An invitation expires after 48 hours.
+
+The invited person may be assigned to one or more events.
+
+An Organizer may revoke a staff member’s access at any time.
+
+Revocation immediately removes access to assigned event-scanning tools.
+
+---
+
+## 13. Ticket transfer
+
+An Attendee may transfer a ticket only when:
+
+* The ticket type allows transfers
+* The ticket is valid
+* The ticket has not been checked in
+* The event has not started
+* The ticket is not involved in a refund request
+
+The sender provides the recipient’s email.
+
+The recipient receives a transfer invitation.
+
+The transfer is completed only when the recipient accepts it.
+
+After acceptance:
+
+* The original ticket becomes transferred
+* A new ticket is issued to the recipient
+* The original QR code becomes invalid
+* A new QR code is generated
+
+The payment record remains linked to the original purchaser.
+
+---
+
+## 14. Waiting list
+
+When an event or ticket type is sold out, an Attendee may join a waiting list.
+
+The waiting list follows first-come, first-served order.
+
+When inventory becomes available:
+
+* The first eligible person receives an email and in-app notification
+* A temporary purchase window is opened
+* The reserved opportunity lasts for 30 minutes
+
+If the person does not purchase within the window, the opportunity moves to the next person.
+
+Joining the waiting list does not guarantee a ticket.
+
+---
+
+## 15. Promotional codes
+
+An Organizer may create promotional codes for their own events.
+
+Each promotional code may define:
+
+* Percentage discount
+* Fixed-amount discount
+* Usage limit
+* Usage limit per Attendee
+* Minimum order value
+* Applicable ticket types
+* Start time
+* Expiry time
+
+A promotional code cannot:
+
+* Reduce an order below zero
+* Be used after expiration
+* Exceed its usage limit
+* Apply to an excluded ticket type
+
+A code is counted as used only after successful payment.
+
+---
+
+## 16. Event announcements
+
+An Organizer may send announcements to paid Attendees of an event.
+
+Announcements may include:
+
+* Schedule changes
+* Venue instructions
+* Entry rules
+* Parking information
+* Emergency notices
+* Event cancellation information
+
+Announcements are delivered through:
+
+* In-app notifications
+* Email
+
+Only Attendees with valid tickets receive normal event announcements.
+
+For cancellation or refund-related announcements, affected refunded users may also receive the message.
+
+---
+
+## 17. Cancellation and refunds
+
+### 17.1 Attendee-requested cancellation
+
+Whether an Attendee receives a refund depends on the event’s refund policy.
+
+A ticket may define one of these policies:
+
+* Fully refundable until a specified deadline
+* Partially refundable until a specified deadline
+* Non-refundable
+* Organizer approval required
+
+The applicable refund policy must be shown before payment.
+
+---
+
+## 17.2 Standard refund rule
+
+Unless the Organizer defines a stricter approved policy:
+
+| Cancellation time                          | Refund                   |
+| ------------------------------------------ | ------------------------ |
+| More than 72 hours before event start      | Full ticket price refund |
+| Between 24 and 72 hours before event start | 50% ticket price refund  |
+| Less than 24 hours before event start      | No refund                |
+| After event start                          | No refund                |
+
+Platform service fees may be non-refundable unless the event itself is cancelled.
+
+---
+
+## 17.3 Organizer-cancelled event
+
+If an Organizer cancels an event:
+
+* All valid tickets are cancelled
+* All paid Attendees receive a full refund
+* Platform service fees are also refunded
+* QR codes become invalid
+* Attendees receive email and in-app notifications
+* Organizer payout for the event is blocked
+* The cancellation reason is recorded
+
+An Organizer cannot cancel an event after it is marked completed.
+
+An Admin may cancel or suspend an event when necessary.
+
+---
+
+## 17.4 Refund lifecycle
+
+A refund request moves through:
+
+requested → approved → processing → refunded
+
+Alternative statuses include:
+
+* rejected
+* failed
+* cancelled
+
+The system records:
+
+* Request reason
+* Requested amount
+* Approved amount
+* Decision maker
+* Decision reason
+* Gateway refund ID
+* Refund completion time
+
+---
+
+## 18. Disputes
+
+An Attendee may open a dispute for:
+
+* Event cancelled without refund
+* Event materially different from its listing
+* Venue inaccessible
+* Ticket rejected incorrectly
+* Duplicate charge
+* Organizer misconduct
+
+A dispute must be opened within seven days after the event ends.
+
+A dispute contains:
+
+* Reason
+* Description
+* Evidence files
+* Related order
+* Related ticket
+* Communication history
+
+The Organizer may respond.
+
+An Admin reviews the evidence and decides whether to:
+
+* Reject the dispute
+* Approve a partial refund
+* Approve a full refund
+* Warn the Organizer
+* Suspend the Organizer
+* Suspend the event
+
+Dispute decisions must be recorded in an audit log.
+
+---
+
+## 19. Organizer earnings and payouts
+
+Ticket revenue does not become immediately withdrawable.
+
+The platform holds event earnings until:
+
+* The event is completed
+* A configurable dispute-hold period has passed
+* No major unresolved dispute exists
+* Refund liabilities have been calculated
+
+Organizer earnings are calculated as:
+
+gross ticket revenue
+− refunded amounts
+− payment-gateway fees
+− platform commission
+− other approved adjustments
+= net payout amount
+
+---
+
+## 19.1 Payout lifecycle
+
+A payout moves through:
+
+pending → eligible → requested → processing → paid
+
+Alternative statuses include:
+
+* held
+* rejected
+* failed
+
+### Pending
+
+The event has not yet completed or the hold period is active.
+
+### Eligible
+
+The earnings are available for payout.
+
+### Requested
+
+The Organizer has requested withdrawal.
+
+### Processing
+
+An Admin is processing the payout.
+
+### Paid
+
+The payout has been completed.
+
+A payout may be placed on hold because of:
+
+* Open disputes
+* Suspicious activity
+* Identity-verification issues
+* Event cancellation
+* Excessive refund rate
+* Admin investigation
+
+---
+
+## 20. Reviews and ratings
+
+An Attendee may review an event only when:
+
+* They purchased a valid ticket
+* The event is completed
+* The ticket was not fully refunded
+* They have not already reviewed the event
+
+A review contains:
+
+* Rating from 1 to 5
+* Written comment
+* Optional photos
+
+An Organizer cannot review their own event.
+
+Admins may hide reviews that contain:
+
+* Abuse
+* Spam
+* Personal information
+* Fraudulent claims
+* Prohibited content
+
+The system should display:
+
+* Event average rating
+* Organizer average rating
+* Total number of reviews
+
+---
+
+## 21. Notifications
+
+The platform supports:
+
+* In-app notifications
+* Email notifications
+
+Notification events include:
+
+* Registration completed
+* Organizer application approved or rejected
+* Event approved or rejected
+* Event published
+* Ticket purchase completed
+* Payment failed
+* Ticket transferred
+* Transfer invitation received
+* Event reminder
+* Announcement received
+* Refund requested
+* Refund approved or rejected
+* Event cancelled
+* Payout status changed
+* Dispute updated
+
+Users may mark notifications as read.
+
+Transactional and security notifications cannot be disabled.
+
+---
+
+## 22. Scheduled jobs
+
+The system requires scheduled background jobs for:
+
+* Expiring ticket reservations
+* Sending event reminders
+* Moving events to ongoing status
+* Moving events to completed status
+* Expiring staff invitations
+* Expiring transfer invitations
+* Processing waiting-list opportunities
+* Releasing organizer payouts
+* Retrying failed emails
+* Cleaning expired OTP records
+* Detecting abandoned orders
+
+Background jobs must be idempotent so that running the same job twice does not create duplicate actions.
+
+---
+
+## 23. Real-time features
+
+The platform should provide real-time updates for:
+
+* Remaining ticket inventory
+* Ticket sales
+* Check-in counts
+* Organizer dashboard metrics
+* Event announcements
+* Refund and dispute status
+* Admin moderation queues
+
+Real-time updates may use WebSockets or Server-Sent Events.
+
+The system must still work correctly when real-time connectivity is unavailable by falling back to normal data refetching.
+
+---
+
+## 24. Organizer analytics
+
+The Organizer dashboard shows:
+
+* Total events
+* Published events
+* Upcoming events
+* Completed events
+* Gross ticket revenue
+* Net estimated earnings
+* Tickets sold
+* Remaining tickets
+* Refund amount
+* Check-in rate
+* Sales by ticket type
+* Sales over time
+* Revenue over time
+* Attendee locations
+* Promotional-code usage
+* Conversion rate
+* Payout history
+
+Analytics must be scoped so an Organizer can view only their own events and revenue.
+
+---
+
+## 25. Admin analytics
+
+The Admin dashboard shows:
+
+* Total users by role
+* Pending Organizer applications
+* Active Organizers
+* Published events
+* Pending event reviews
+* Ticket sales volume
+* Gross merchandise value
+* Platform revenue
+* Refund volume
+* Open disputes
+* Completed payouts
+* Suspended events
+* User growth
+* Event-category performance
+
+Only authorized Admins and Super Admins may access platform-wide financial metrics.
+
+---
+
+## 26. Audit logs
+
+Sensitive actions must create audit logs.
+
+Logged actions include:
+
+* Organizer approval or rejection
+* Event approval, rejection, suspension, or cancellation
+* User blocking or unblocking
+* Refund approval
+* Payout processing
+* Platform-fee changes
+* Admin creation
+* Role changes
+* Dispute decisions
+* Manual ticket check-in
+
+Each audit log stores:
+
+* Acting user
+* Action
+* Target resource
+* Previous value, when applicable
+* New value, when applicable
+* Timestamp
+* IP address
+* User-agent information
+
+Audit logs cannot be edited by normal users.
+
+---
+
+## 27. Security requirements
+
+The system must include:
+
+* Role-based access control
+* Resource ownership validation
+* Secure password hashing
+* HTTP-only authentication cookies
+* CSRF protection where required
+* Input validation
+* File-upload validation
+* Rate limiting
+* OTP attempt limiting
+* Payment-signature verification
+* Idempotent payment handling
+* Prevention of ticket overselling
+* QR-token integrity protection
+* Audit logging
+* Secure secret management
+
+A frontend-hidden button is not authorization.
+
+Every protected action must also be checked on the backend.
+
+---
+
+## 28. File uploads
+
+Supported file uploads include:
+
+* Organizer verification documents
+* Event cover images
+* Event gallery images
+* Dispute evidence
+* Review photos
+
+The system must validate:
+
+* File type
+* File size
+* File count
+* Upload ownership
+
+Private verification documents must not be publicly accessible.
+
+Public event images may be stored and delivered through a cloud media service.
+
+---
+
+## 29. Error-handling requirements
+
+The system must provide structured errors for:
+
+* Validation failure
+* Authentication failure
+* Authorization failure
+* Resource not found
+* Ticket inventory conflict
+* Expired reservation
+* Duplicate payment callback
+* Invalid QR code
+* Already-used ticket
+* Payment-gateway failure
+* Refund failure
+* File-upload failure
+* Rate-limit violation
+
+Errors shown to users must be clear without exposing internal stack traces, secrets, or database details.
+
+---
+
+## 30. Conceptual data models
+
+The database structure is not finalized. These models describe the required information, not the final schema.
+
+### User
+
+Shared identity for every role:
+
+* Name
+* Email
+* Password
+* Google account link
+* Role
+* Account status
+* Email-verification status
+* Must-change-password flag
+* Last login
+* Session information
+
+### Attendee profile
+
+* User reference
+* Phone number
+* Profile image
+* Saved preferences
+* Location
+* Notification preferences
+
+### Organizer profile
+
+* User reference
+* Organization name
+* Organization type
+* Phone number
+* Address
+* Verification documents
+* Approval status
+* Approval or rejection information
+* Payout information
+* Average rating
+
+### Event Staff profile
+
+* User reference
+* Inviting Organizer
+* Assigned events
+* Invitation status
+* Access status
+
+### Event
+
+* Organizer
+* Event information
+* Category
+* Venue
+* Coordinates
+* Date and time
+* Capacity
+* Status
+* Approval data
+* Policies
+* Images
+
+### Ticket type
+
+* Event
+* Name
+* Description
+* Price
+* Quantity
+* Sold quantity
+* Reserved quantity
+* Purchase limit
+* Sale period
+* Transfer rules
+* Refund rules
+
+### Ticket reservation
+
+* Attendee
+* Event
+* Ticket type
+* Quantity
+* Expiry time
+* Reservation status
+
+### Order
+
+* Attendee
+* Event
+* Ticket selections
+* Price breakdown
+* Discount
+* Total amount
+* Payment status
+* Order status
+
+### Payment
+
+* Order
+* Gateway
+* Transaction ID
+* Amount
+* Currency
+* Verification status
+* Raw gateway reference
+* Payment time
+
+### Ticket
+
+* Order
+* Event
+* Ticket type
+* Owner
+* Ticket number
+* QR identity
+* Status
+* Check-in information
+
+### Ticket transfer
+
+* Ticket
+* Sender
+* Recipient email
+* Recipient user
+* Status
+* Expiry time
+* Acceptance time
+
+### Check-in
+
+* Ticket
+* Event
+* Scanned by
+* Check-in method
+* Timestamp
+* Device information
+
+### Refund
+
+* Order
+* Ticket
+* Requested amount
+* Approved amount
+* Reason
+* Status
+* Gateway refund ID
+* Decision information
+
+### Dispute
+
+* Attendee
+* Organizer
+* Event
+* Order
+* Reason
+* Evidence
+* Status
+* Admin decision
+
+### Payout
+
+* Organizer
+* Event
+* Gross revenue
+* Deductions
+* Net amount
+* Status
+* Payment reference
+
+### Review
+
+* Attendee
+* Event
+* Organizer
+* Rating
+* Comment
+* Images
+* Moderation status
+
+### Notification
+
+* Recipient
+* Type
+* Title
+* Message
+* Related resource
+* Read status
+
+### Audit log
+
+* Actor
+* Action
+* Target
+* Previous value
+* New value
+* Metadata
+* Timestamp
+
+---
+
+## 31. Recommended technical implementation
+
+A suitable full-stack implementation may use:
+
+### Frontend
+
+* Next.js
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* TanStack Query
+* React Hook Form
+* Zod
+* Recharts
+* Socket.IO client
+
+### Backend
+
+* Node.js
+* Express.js or NestJS
+* TypeScript
+* PostgreSQL
+* Prisma ORM
+* Redis
+* Socket.IO
+* Background job queues
+
+### Authentication and security
+
+* Access and refresh tokens
+* Google OAuth
+* HTTP-only cookies
+* bcrypt or Argon2
+* Role-based authorization
+* Rate limiting
+* Email OTP
+
+### Infrastructure and integrations
+
+* Stripe or SSLCommerz
+* Cloudinary or Amazon S3
+* Redis-based inventory reservations
+* BullMQ for scheduled jobs
+* Nodemailer or Resend
+* QR-code generation
+* PDF invoice and ticket generation
+* Docker
+* GitHub Actions
+* Vercel or AWS deployment
+
+---
+
+## 32. Recruiter-focused technical highlights
+
+The project should demonstrate:
+
+* Multi-role authentication and authorization
+* Organizer and event approval workflows
+* Complex event and ticket lifecycles
+* Concurrency-safe ticket inventory
+* Temporary checkout reservations
+* Idempotent payment verification
+* QR-based ticket validation
+* Real-time check-in statistics
+* Ticket-transfer workflows
+* Refund and dispute management
+* Escrow-style organizer payouts
+* Scheduled background jobs
+* PDF ticket and invoice generation
+* Email and in-app notifications
+* Analytics dashboards
+* Audit logging
+* Secure file uploads
+* Location-based event discovery
+* Production-grade error handling
+
+These features make EventFlow more than a basic CRUD application. It demonstrates payment processing, transaction safety, concurrency control, role-based systems, real-time communication, background processing, analytics, security, and complex business-rule implementation.
