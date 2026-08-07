@@ -1,0 +1,25 @@
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  ORGANIZER
+  EVENT_STAFF
+  ATTENDEE
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum OrganizerApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum StaffInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
