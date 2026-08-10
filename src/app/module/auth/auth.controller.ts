@@ -1,122 +1,136 @@
-import { Request, Response } from 'express'
-import httpStatus from 'http-status'
-import { catchAsync } from '../../utils/catchAsync'
-import { sendResponse } from '../../utils/sendResponse'
-import { IRequestUser } from './auth.interface'
-import { AuthService } from './auth.service'
+import type { Request, Response } from "express";
+import httpStatus from "http-status";
+import config from "../../config";
+import { catchAsync } from "../../utils/catchAsync";
+import { sendResponse } from "../../utils/sendResponse";
+import type { IRequestUser } from "./auth.interface";
+import { AuthService } from "./auth.service";
 
-const registerPatient = catchAsync(async (req: Request, res: Response) => {
-    const payload = req.body
-    const result = await AuthService.registerPatient(payload)
+const setAuthCookies = (
+	res: Response,
+	accessToken: string,
+	refreshToken: string,
+) => {
+	const isProduction = config.node_env === "production";
 
-    const { accessToken, refreshToken, user, patient } = result
+	res.cookie("accessToken", accessToken, {
+		httpOnly: true,
+		secure: isProduction,
+		sameSite: isProduction ? "none" : "lax",
+		maxAge: 1000 * 60 * 60 * 24, // 1 day
+	});
 
-    res.cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 // 24 hour or 1 day
-    })
-    res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
-    })
+	res.cookie("refreshToken", refreshToken, {
+		httpOnly: true,
+		secure: isProduction,
+		sameSite: isProduction ? "none" : "lax",
+		maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+	});
+};
 
-    sendResponse(res, {
-        statusCode: httpStatus.CREATED,
-        success: true,
-        message: 'Patient registered successfully',
-        data: {
-            accessToken,
-            refreshToken,
-            user,
-            patient,
-        },
-    })
-})
+const registerAttendee = catchAsync(
+	async (req: Request, res: Response) => {
+		const payload = req.body;
 
-const loginUser = catchAsync(async (req: Request, res: Response) => {
-    const payload = req.body
-    const result = await AuthService.loginUser(payload)
-    const { accessToken, refreshToken } = result
+		const result =
+			await AuthService.registerAttendee(payload);
 
-    res.cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 // 24 hour or 1 day
-    })
-    res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
-    })
+		sendResponse(res, {
+			statusCode: httpStatus.CREATED,
+			success: true,
+			message:
+				"Attendee registered successfully. Please verify your email.",
+			data: result,
+		});
+	},
+);
 
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: 'User logged in successfully',
-        data: {
-            accessToken,
-            refreshToken
-        },
-    })
-})
+const loginUser = catchAsync(
+	async (req: Request, res: Response) => {
+		const payload = req.body;
 
-const getMe = catchAsync(async (req: Request, res: Response) => {
-    const user = req.user as unknown as IRequestUser
+		const result = await AuthService.loginUser(payload);
 
-    if (!user) {
-        throw new Error('User information is missing in the request')
-    }
+		const {
+			accessToken,
+			refreshToken,
+			user,
+		} = result;
 
-    const result = await AuthService.getMe(user)
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: 'User profile fetched successfully',
-        data: result,
-    })
-})
+		setAuthCookies(
+			res,
+			accessToken,
+			refreshToken,
+		);
 
-const refreshToken = catchAsync(async (req: Request, res: Response) => {
-    if (!req.cookies.refreshToken) {
-        throw new Error('Refresh token is missing')
-    }
-    const result = await AuthService.refreshToken(req.cookies.refreshToken)
-    const { accessToken, refreshToken: newRefreshToken } = result
+		sendResponse(res, {
+			statusCode: httpStatus.OK,
+			success: true,
+			message: "User logged in successfully",
+			data: {
+				user,
+			},
+		});
+	},
+);
 
-    res.cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 // 24 hour or 1 day
-    })
-    res.cookie("refreshToken", newRefreshToken, {
-        httpOnly: true,
-        secure: false,
-        sameSite: "none",
-        maxAge: 1000 * 60 * 60 * 24 * 7 // 7 days
-    })
+const getMe = catchAsync(
+	async (req: Request, res: Response) => {
+		const user =
+			req.user as unknown as IRequestUser;
 
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: 'New tokens generated successfully',
-        data: {
-            accessToken,
-            refreshToken: newRefreshToken,
-        },
-    })
-})
+		if (!user) {
+			throw new Error(
+				"User information is missing in the request",
+			);
+		}
 
+		const result =
+			await AuthService.getMe(user);
+
+		sendResponse(res, {
+			statusCode: httpStatus.OK,
+			success: true,
+			message:
+				"User profile fetched successfully",
+			data: result,
+		});
+	},
+);
+
+const refreshToken = catchAsync(
+	async (req: Request, res: Response) => {
+		const token =
+			req.cookies?.refreshToken;
+
+		if (!token) {
+			throw new Error(
+				"Refresh token is missing",
+			);
+		}
+
+		const result =
+			await AuthService.refreshToken(token);
+
+		setAuthCookies(
+			res,
+			result.accessToken,
+			result.refreshToken,
+		);
+
+		sendResponse(res, {
+			statusCode: httpStatus.OK,
+			success: true,
+			message:
+				"New tokens generated successfully",
+			data: null,
+		});
+	},
+);
 
 export const AuthController = {
-    registerPatient,
-    loginUser,
-    getMe,
-    refreshToken,
-}
+	registerAttendee,
+	loginUser,
+	getMe,
+	refreshToken,
+};
