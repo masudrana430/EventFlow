@@ -23,3 +23,8 @@ enum StaffInvitationStatus {
   EXPIRED
   REVOKED
 }
+
+enum AuthProvider {
+  GOOGLE
+  CREDENTIALS
+}

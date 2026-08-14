@@ -4,8 +4,10 @@ export interface IRegisterAttendeePayload {
 	name: string;
 	email: string;
 	password: string;
-	phone?: string;
-	location?: string;
+	attendee: {
+		phone?: string;
+		location?: string;
+	};
 }
 
 export interface ILoginUserPayload {
