@@ -10,12 +10,17 @@ import config from "../../config";
 import { prisma } from "../../lib/prisma";
 import { jwtUtils } from "../../utils/jwt";
 import type {
+  IForgotPasswordPayload,
   ILoginUserPayload,
   IRegisterAttendeePayload,
   IRequestUser,
+  IResetPasswordPayload,
 } from "./auth.interface";
 import { OAuth2Client, TokenPayload } from "google-auth-library";
 import { googleClient } from "../../lib/googleAuth";
+
+import { redisClient } from "../../lib/redis";
+import crypto from "crypto";
 
 /**
  * Creates EventFlow access + refresh tokens.
@@ -57,80 +62,61 @@ const generateTokens = (user: {
 /**
  * Register a normal EventFlow attendee.
  */
-const registerAttendee = async (
-	payload: IRegisterAttendeePayload,
-) => {
-	const {
-		name,
-		password,
-		attendee: attendeeData,
-	} = payload;
+const registerAttendee = async (payload: IRegisterAttendeePayload) => {
+  const { name, password, attendee: attendeeData } = payload;
 
-	const email = payload.email
-		.trim()
-		.toLowerCase();
+  const email = payload.email.trim().toLowerCase();
 
-	const isUserExists =
-		await prisma.user.findUnique({
-			where: {
-				email,
-			},
-		});
+  const isUserExists = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
 
-	if (isUserExists) {
-		throw new Error(
-			"User with this email already exists",
-		);
-	}
+  if (isUserExists) {
+    throw new Error("User with this email already exists");
+  }
 
-	const hashedPassword =
-		await bcrypt.hash(password, 8);
+  const hashedPassword = await bcrypt.hash(password, 8);
 
-	const createdUser =
-		await prisma.user.create({
-			data: {
-				name,
-				email,
-				password: hashedPassword,
+  const createdUser = await prisma.user.create({
+    data: {
+      name,
+      email,
+      password: hashedPassword,
 
-				role: UserRole.ATTENDEE,
-				status: UserStatus.ACTIVE,
+      role: UserRole.ATTENDEE,
+      status: UserStatus.ACTIVE,
 
-				isEmailVerified: false,
+      isEmailVerified: false,
 
-				attendee: {
-					create: {
-						phone:
-							attendeeData?.phone || "",
-						location:
-							attendeeData?.location || "",
-					},
-				},
-			},
+      attendee: {
+        create: {
+          phone: attendeeData?.phone || "",
+          location: attendeeData?.location || "",
+        },
+      },
+    },
 
-			omit: {
-				password: true,
-			},
+    omit: {
+      password: true,
+    },
 
-			include: {
-				attendee: true,
-			},
-		});
+    include: {
+      attendee: true,
+    },
+  });
 
-	const { attendee, ...user } =
-		createdUser;
+  const { attendee, ...user } = createdUser;
 
-	const {
-		accessToken,
-		refreshToken,
-	} = generateTokens(user);
+  const { accessToken, refreshToken } = generateTokens(user);
 
-	return {
-		accessToken,
-		refreshToken,
-		user,
-		attendee,
-	};
+  return {
+    accessToken,
+    refreshToken,
+    user,
+    attendee,
+  };
 };
 
 /**
@@ -418,12 +404,117 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
   };
 };
 
+const forgotPassword = async (payload: IForgotPasswordPayload) => {
+  const email = payload.email.trim().toLowerCase();
+
+  const isUserExist = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (!isUserExist) {
+    throw new Error("User does not exist");
+  }
+
+  if (isUserExist.status === UserStatus.BLOCKED) {
+    throw new Error("User is blocked");
+  }
+
+  if (!isUserExist.isEmailVerified) {
+    throw new Error("User email is not verified");
+  }
+
+  // Pure Google account has no password to reset
+  if (!isUserExist.password) {
+    throw new Error(
+      "This account uses Google login. Please continue with Google.",
+    );
+  }
+
+  const otp = crypto.randomInt(100000, 1000000).toString();
+
+  const key = `forgot-password-otp:${email}`;
+
+  const expirationSeconds = 5 * 60;
+
+  await redisClient.set(key, otp, {
+    expiration: {
+      type: "EX",
+      value: expirationSeconds,
+    },
+  });
+
+  console.log("Forgot password OTP:", otp);
+
+  // Later: send this OTP to the user's email
+
+  return {
+    message: "OTP sent successfully",
+  };
+};
+
+const resetPassword = async (payload: IResetPasswordPayload) => {
+  const {email, otp, newPassword} = payload;
+
+  const isUserExist = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (!isUserExist) {
+    throw new Error("User does not exist");
+  }
+
+  if (isUserExist.status === UserStatus.BLOCKED) {
+    throw new Error("User is blocked");
+  }
+
+  if (!isUserExist.isEmailVerified) {
+    throw new Error("User email is not verified");
+  }
+
+  // Pure Google account has no password to reset
+  if (!isUserExist.password) {
+    throw new Error(
+      "This account uses Google login. Please continue with Google.",
+    );
+  }
+
+  const key = `forgot-password-otp:${email}`;
+  const redisOtp = await redisClient.get(key)
+
+	if(!redisOtp){
+		throw new Error("Invalid OTP")
+	}
+
+	if(redisOtp !== otp){
+		throw new Error("OTP Does Not Match")
+	}
+
+	const hashedNewPassword = await bcrypt.hash(newPassword, Number(config.bcrypt_salt_rounds));
+
+	await prisma.user.update({
+		where : {
+			email : isUserExist.email
+		},
+		data : {
+			password : hashedNewPassword
+		}
+	});
+
+	await redisClient.del([key]);
+};
+
 export const AuthService = {
   registerAttendee,
   loginUser,
   getMe,
   refreshToken,
   googleLogin,
+  forgotPassword,
+  resetPassword,
 };
 
 export interface IGoogleLoginPayload {

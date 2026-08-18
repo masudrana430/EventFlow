@@ -5,8 +5,6 @@ import { catchAsync } from "../../utils/catchAsync";
 import { sendResponse } from "../../utils/sendResponse";
 import type { IRequestUser } from "./auth.interface";
 import { AuthService } from "./auth.service";
-import { attendeeRegistrationZodSchema } from "./auth.validation";
-
 
 const setAuthCookies = (
   res: Response,
@@ -31,28 +29,19 @@ const setAuthCookies = (
 };
 
 const registerAttendee = catchAsync(async (req: Request, res: Response) => {
-  const payload =
-			attendeeRegistrationZodSchema.safeParse(
-				req.body,
-			);
+  // const payload = attendeeValidation.attendeeRegistrationZodSchema.safeParse(
+  //   req.body,
+  // );
 
-		if (!payload.success) {
-			throw new Error(
-				`Validation failed: ${payload.error.message}`,
-			);
-		}
+  // if (!payload.success) {
+  //   throw new Error(`Validation failed: ${payload.error.message}`);
+  // }
 
-		const result =
-			await AuthService.registerAttendee(
-				payload.data as any,
-			);
+  const payload = req.body;
 
-		const {
-			accessToken,
-			refreshToken,
-			user,
-			attendee,
-		} = result;
+  const result = await AuthService.registerAttendee(payload);
+
+  const { accessToken, refreshToken, user, attendee } = result;
 
   res.cookie("accessToken", accessToken, {
     httpOnly: true,
@@ -168,10 +157,39 @@ const googleLogin = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const forgotPassword = catchAsync(async (req: Request, res: Response) => {
+  const payload = req.body;
+  await AuthService.forgotPassword(payload);
+
+  
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `OTP sent to email : ${payload.email}`,
+    data: null,
+  });
+});
+const resetPassword = catchAsync(async (req: Request, res: Response) => {
+  const payload = req.body;
+  await AuthService.resetPassword(payload);
+
+  
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: `password change successfully`,
+    data: null,
+  });
+});
+
 export const AuthController = {
   registerAttendee,
   loginUser,
   getMe,
   refreshToken,
   googleLogin,
+  forgotPassword,
+  resetPassword
 };
