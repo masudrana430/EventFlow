@@ -39,7 +39,36 @@ const registerAttendee = catchAsync(async (req: Request, res: Response) => {
 
   const payload = req.body;
 
-  const result = await AuthService.registerAttendee(payload);
+  await AuthService.registerAttendee(payload);
+
+  // const { accessToken, refreshToken, user, attendee } = result;
+
+  // res.cookie("accessToken", accessToken, {
+  //   httpOnly: true,
+  //   secure: false,
+  //   sameSite: "none",
+  //   maxAge: 1000 * 60 * 60 * 24,
+  // });
+
+  // res.cookie("refreshToken", refreshToken, {
+  //   httpOnly: true,
+  //   secure: false,
+  //   sameSite: "none",
+  //   maxAge: 1000 * 60 * 60 * 24 * 7,
+  // });
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: "Verification OTP Sent",
+    data: null,
+  });
+});
+
+const verifyAttendeeEmail = catchAsync(async (req: Request, res: Response) => {
+  const payload = req.body;
+
+  const result = await AuthService.verifyAttendeeEmail(payload);
 
   const { accessToken, refreshToken, user, attendee } = result;
 
@@ -60,7 +89,7 @@ const registerAttendee = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: "Attendee registered successfully",
+    message: "Email verified successfully",
     data: {
       accessToken,
       refreshToken,
@@ -161,8 +190,6 @@ const forgotPassword = catchAsync(async (req: Request, res: Response) => {
   const payload = req.body;
   await AuthService.forgotPassword(payload);
 
-  
-
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -174,8 +201,6 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
   const payload = req.body;
   await AuthService.resetPassword(payload);
 
-  
-
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -186,10 +211,11 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
 
 export const AuthController = {
   registerAttendee,
+  verifyAttendeeEmail,
   loginUser,
   getMe,
   refreshToken,
   googleLogin,
   forgotPassword,
-  resetPassword
+  resetPassword,
 };

@@ -1,3 +1,7 @@
+/** biome-ignore-all lint/correctness/noUnusedImports: <explanation> */
+/** biome-ignore-all assist/source/organizeImports: <explanation> */
+/** biome-ignore-all lint/style/useNodejsImportProtocol: <explanation> */
+/** biome-ignore-all lint/style/useImportType: <explanation> */
 import bcrypt from "bcryptjs";
 import type { JwtPayload, SignOptions } from "jsonwebtoken";
 import {
@@ -15,12 +19,16 @@ import type {
   IRegisterAttendeePayload,
   IRequestUser,
   IResetPasswordPayload,
+  IVerifyEmailPayload,
 } from "./auth.interface";
 import { OAuth2Client, TokenPayload } from "google-auth-library";
 import { googleClient } from "../../lib/googleAuth";
 
 import { redisClient } from "../../lib/redis";
 import crypto from "crypto";
+import { transporter } from "../../lib/nodeMailer";
+import path from "path/win32";
+import ejs from "ejs";
 
 /**
  * Creates EventFlow access + refresh tokens.
@@ -77,9 +85,88 @@ const registerAttendee = async (payload: IRegisterAttendeePayload) => {
     throw new Error("User with this email already exists");
   }
 
-  const hashedPassword = await bcrypt.hash(password, 8);
+  const hashedPassword = await bcrypt.hash(
+    password,
+    Number(config.bcrypt_salt_rounds),
+  );
 
-  const createdUser = await prisma.user.create({
+  const expirationSeconds = 5 * 60;
+
+  // --------------------------
+  // Generate OTP
+  // --------------------------
+
+  const otp = crypto.randomInt(100000, 1000000).toString();
+
+  const otpKey = `registration-otp:${email}`;
+
+  await redisClient.set(otpKey, otp, {
+    expiration: {
+      type: "EX",
+      value: expirationSeconds,
+    },
+  });
+
+  // --------------------------
+  // Store temporary user data
+  // --------------------------
+
+  const registrationDataKey = `attendee-registration-data:${email}`;
+
+  const redisUserDataPayload = {
+    name,
+    email,
+    password: hashedPassword,
+
+    attendee: {
+      phone: attendeeData?.phone,
+      location: attendeeData?.location,
+    },
+  };
+
+  await redisClient.set(
+    registrationDataKey,
+    JSON.stringify(redisUserDataPayload),
+    {
+      expiration: {
+        type: "EX",
+        value: expirationSeconds,
+      },
+    },
+  );
+
+  // --------------------------
+  // Render EJS email
+  // --------------------------
+
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/registration-user-otp.ejs",
+  );
+
+  const templateData = {
+    name,
+    email,
+    otp,
+    expirationMinutes: expirationSeconds / 60,
+    year: new Date().getFullYear(),
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
+  // --------------------------
+  // Send OTP email
+  // --------------------------
+
+  await transporter.sendMail({
+    from: `"EventFlow" <${config.email_sender}>`,
+    to: email,
+    subject: "Verify Your EventFlow Account",
+    html,
+  });
+
+  /**
+    const createdUser = await prisma.user.create({
     data: {
       name,
       email,
@@ -117,8 +204,182 @@ const registerAttendee = async (payload: IRegisterAttendeePayload) => {
     user,
     attendee,
   };
+   */
 };
 
+/**
+ * Verify an attendee's email.
+ * Register
+   ↓
+Store hashed registration data in Redis
+   ↓
+Store registration OTP in Redis
+   ↓
+Send OTP
+   ↓
+POST /verify-email
+   ↓
+Validate email + OTP with Zod
+   ↓
+Read OTP from Redis
+   ↓
+Read registration data from Redis
+   ↓
+Compare OTP
+   ↓
+Create User + Attendee in PostgreSQL
+   ↓
+Delete Redis keys
+   ↓
+Generate JWT
+   ↓
+Set cookies
+   ↓
+Registration complete ✅
+ */
+const verifyAttendeeEmail = async (payload: IVerifyEmailPayload) => {
+  const email = payload.email.trim().toLowerCase();
+
+  const otp = payload.otp;
+
+  // Check whether account was already created
+  const isUserExist = await prisma.user.findUnique({
+    where: {
+      email,
+    },
+  });
+
+  if (isUserExist) {
+    if (isUserExist.isEmailVerified) {
+      throw new Error("Email is already verified");
+    }
+
+    throw new Error("User with this email already exists");
+  }
+
+  // ----------------------------
+  // Redis keys
+  // ----------------------------
+
+  const otpKey = `registration-otp:${email}`;
+
+  const attendeeRegistrationKey = `attendee-registration-data:${email}`;
+
+  // ----------------------------
+  // Get OTP
+  // ----------------------------
+
+  const redisOtp = await redisClient.get(otpKey);
+
+  if (!redisOtp) {
+    throw new Error("OTP has expired or is invalid");
+  }
+
+  if (redisOtp !== otp) {
+    throw new Error("OTP does not match");
+  }
+
+  // ----------------------------
+  // Get temporary registration data
+  // ----------------------------
+
+  const redisAttendeeData = await redisClient.get(attendeeRegistrationKey);
+
+  if (!redisAttendeeData) {
+    throw new Error("Registration data has expired");
+  }
+
+  const attendeePayload: IRegisterAttendeePayload =
+    JSON.parse(redisAttendeeData);
+
+  // ----------------------------
+  // Create verified user
+  // ----------------------------
+
+  const createdUser = await prisma.user.create({
+    data: {
+      name: attendeePayload.name,
+
+      email: attendeePayload.email,
+
+      // Already hashed during registration
+      password: attendeePayload.password,
+
+      role: UserRole.ATTENDEE,
+
+      status: UserStatus.ACTIVE,
+
+      isEmailVerified: true,
+
+      attendee: {
+        create: {
+          phone: attendeePayload.attendee?.phone,
+
+          location: attendeePayload.attendee?.location,
+        },
+      },
+    },
+
+    omit: {
+      password: true,
+    },
+
+    include: {
+      attendee: true,
+    },
+  });
+
+  // ----------------------------
+  // Delete temporary Redis data
+  // only AFTER successful DB creation
+  // ----------------------------
+
+  await redisClient.del(otpKey);
+
+  await redisClient.del(attendeeRegistrationKey);
+
+  // --------------------------
+  // Render EJS email
+  // --------------------------
+
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/patient-welcome-email.ejs",
+  );
+
+  const templateData = {
+    name : createdUser.name,
+    year: new Date().getFullYear()
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
+  // --------------------------
+  // Send OTP email
+  // --------------------------
+
+  await transporter.sendMail({
+    from: `"EventFlow" <${config.email_sender}>`,
+    to: email,
+    subject: "Welcome to EventFlow! Your Account is Verified",
+    html,
+  });
+
+  // ----------------------------
+  // Generate JWT
+  // ----------------------------
+
+  const { attendee, ...user } = createdUser;
+
+  const { accessToken, refreshToken } = generateTokens(user);
+
+  return {
+    accessToken,
+    refreshToken,
+    user,
+    attendee,
+  };
+};
 /**
  * Login with email + password.
  */
@@ -394,6 +655,32 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
         attendee: true,
       },
     });
+    // --------------------------
+  // Render EJS email
+  // --------------------------
+
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/patient-welcome-email.ejs",
+  );
+
+  const templateData = {
+    name : user.name,
+    year: new Date().getFullYear()
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
+  // --------------------------
+  // Send OTP email
+  // --------------------------
+
+  await transporter.sendMail({
+    from: `"EventFlow" <${config.email_sender}>`,
+    to: email,
+    subject: "Welcome to EventFlow! Your Account is Verified",
+    html,
+  });
   }
 
   const { accessToken, refreshToken } = generateTokens(user);
@@ -448,6 +735,26 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
   console.log("Forgot password OTP:", otp);
 
   // Later: send this OTP to the user's email
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/forgot-password.ejs",
+  );
+
+  const templateData = {
+    name: isUserExist.name,
+    otp,
+    expirationMinutes: expirationSeconds / 60,
+    year: new Date().getFullYear(),
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
+  await transporter.sendMail({
+    from: `"EventFlow" <${config.email_sender}>`,
+    to: isUserExist.email,
+    subject: "Your EventFlow Password Reset Code",
+    html,
+  });
 
   return {
     message: "OTP sent successfully",
@@ -455,7 +762,7 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
 };
 
 const resetPassword = async (payload: IResetPasswordPayload) => {
-  const {email, otp, newPassword} = payload;
+  const { email, otp, newPassword } = payload;
 
   const isUserExist = await prisma.user.findUnique({
     where: {
@@ -483,32 +790,55 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
   }
 
   const key = `forgot-password-otp:${email}`;
-  const redisOtp = await redisClient.get(key)
+  const redisOtp = await redisClient.get(key);
 
-	if(!redisOtp){
-		throw new Error("Invalid OTP")
-	}
+  if (!redisOtp) {
+    throw new Error("Invalid OTP");
+  }
 
-	if(redisOtp !== otp){
-		throw new Error("OTP Does Not Match")
-	}
+  if (redisOtp !== otp) {
+    throw new Error("OTP Does Not Match");
+  }
 
-	const hashedNewPassword = await bcrypt.hash(newPassword, Number(config.bcrypt_salt_rounds));
+  const hashedNewPassword = await bcrypt.hash(
+    newPassword,
+    Number(config.bcrypt_salt_rounds),
+  );
 
-	await prisma.user.update({
-		where : {
-			email : isUserExist.email
-		},
-		data : {
-			password : hashedNewPassword
-		}
-	});
+  await prisma.user.update({
+    where: {
+      email: isUserExist.email,
+    },
+    data: {
+      password: hashedNewPassword,
+    },
+  });
 
-	await redisClient.del([key]);
+  await redisClient.del([key]);
+  const templatePath = path.join(
+    process.cwd(),
+    "src/app/templates/reset-password.ejs",
+  );
+
+  const templateData = {
+    name: isUserExist.name,
+    email: isUserExist.email,
+    year: new Date().getFullYear(),
+  };
+
+  const html = await ejs.renderFile(templatePath, templateData);
+
+  await transporter.sendMail({
+    from: `"EventFlow" <${config.email_sender}>`,
+    to: isUserExist.email,
+    subject: "Your EventFlow Password Has Been Changed",
+    html,
+  });
 };
 
 export const AuthService = {
   registerAttendee,
+  verifyAttendeeEmail,
   loginUser,
   getMe,
   refreshToken,

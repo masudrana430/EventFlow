@@ -33,6 +33,25 @@ const attendeeRegistrationZodSchema = z.object({
     .optional(),
 });
 
+const attendeeEmailVerifyZodSchema = z.object({
+	email: z
+		.email("Invalid email address")
+		.trim()
+		.toLowerCase(),
+
+	otp: z
+		.string()
+		.length(6, "OTP must be 6 digits")
+		.regex(/^\d{6}$/, "OTP must contain only numbers"),
+});
+
+ const PatientEmailVerifyZodSchema = z.object({
+    
+    email: z.email("Not email!!"),
+     otp: z.string().length(6)
+   
+})
+
 const LoginZodSchema = z.object({
     email : z.email(),
     password: z.string()
@@ -63,6 +82,8 @@ const ResetPasswordZodSchema = z.object({
 
 export const userValidation = {
   attendeeRegistrationZodSchema,
+  attendeeEmailVerifyZodSchema,
+  PatientEmailVerifyZodSchema,
   loginZodSchema: LoginZodSchema,
   ForgotPasswordZodSchema,
   ResetPasswordZodSchema
