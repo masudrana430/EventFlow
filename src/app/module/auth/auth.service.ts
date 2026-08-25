@@ -161,6 +161,7 @@ const registerAttendee = async (payload: IRegisterAttendeePayload) => {
   await transporter.sendMail({
     from: `"EventFlow" <${config.email_sender}>`,
     to: email,
+    replyTo: `"EventFlow Support" <${config.email_sender}>`,
     subject: "Verify Your EventFlow Account",
     html,
   });
@@ -361,6 +362,7 @@ const verifyAttendeeEmail = async (payload: IVerifyEmailPayload) => {
   await transporter.sendMail({
     from: `"EventFlow" <${config.email_sender}>`,
     to: email,
+    replyTo: `"EventFlow Support" <${config.email_sender}>`,
     subject: "Welcome to EventFlow! Your Account is Verified",
     html,
   });
@@ -678,6 +680,7 @@ const googleLogin = async (payload: IGoogleLoginPayload) => {
   await transporter.sendMail({
     from: `"EventFlow" <${config.email_sender}>`,
     to: email,
+    replyTo: `"EventFlow Support" <${config.email_sender}>`,
     subject: "Welcome to EventFlow! Your Account is Verified",
     html,
   });
@@ -752,6 +755,7 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
   await transporter.sendMail({
     from: `"EventFlow" <${config.email_sender}>`,
     to: isUserExist.email,
+    replyTo: `"EventFlow Support" <${config.email_sender}>`,
     subject: "Your EventFlow Password Reset Code",
     html,
   });
@@ -831,6 +835,7 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
   await transporter.sendMail({
     from: `"EventFlow" <${config.email_sender}>`,
     to: isUserExist.email,
+    replyTo: `"EventFlow Support" <${config.email_sender}>`,
     subject: "Your EventFlow Password Has Been Changed",
     html,
   });

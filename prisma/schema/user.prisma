@@ -1,20 +1,19 @@
 model User {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   name     String
-  email    String  @unique
+  email    String @unique
   password String?
 
   role   UserRole
   status UserStatus @default(ACTIVE)
 
-  isEmailVerified Boolean @default(false)
-
-  googleId     String?      @unique
-  AuthProvider AuthProvider @default(CREDENTIALS)
-
+  isEmailVerified    Boolean @default(false)
+  googleId           String? @unique
   mustChangePassword Boolean @default(false)
+  lastLoginAt        DateTime?
 
-  lastLoginAt DateTime?
+  imageUrl      String @default("")
+  imagePublicId String @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
