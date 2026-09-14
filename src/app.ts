@@ -8,7 +8,9 @@ import express, {
   type Response,
 } from "express";
 import httpStatus from "http-status";
+import swaggerUi from "swagger-ui-express";
 import config from "./app/config";
+import { openApiSpec } from "./app/docs/openapi";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
 import { notFound } from "./app/middleware/notFound";
 import { AuthRoutes } from "./app/module/auth/auth.route";
@@ -33,15 +35,24 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+// API documentation
+app.get("/api-docs.json", (_req: Request, res: Response) => {
+  res.status(httpStatus.OK).json(openApiSpec);
+});
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(openApiSpec, {
+    explorer: true,
+    customSiteTitle: "EventFlow API Docs",
+  }),
+);
+
 app.use("/api/v1/auth", AuthRoutes);
 app.use("/api/v1/user", UserRoutes);
 
 app.post("/test", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    
-
-     
-
     res.status(httpStatus.OK).json({
       success: true,
       message: "EventFlow Zod validation successful",
@@ -55,10 +66,10 @@ app.post("/test", async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // Basic route
-app.get("/", async (req: Request, res: Response) => {
+app.get("/", async (_req: Request, res: Response) => {
   res.status(httpStatus.OK).json({
     success: true,
-    message: "Welcome to PH Healthcare System Backend",
+    message: "Welcome to EventFlow Backend",
   });
 });
 
