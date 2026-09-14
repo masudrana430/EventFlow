@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { JwtPayload } from "jsonwebtoken";
-import type { Role } from "../../generated/prisma/enums";
+import type { UserRole } from "../../generated/prisma/enums";
 import config from "../config";
 import { prisma } from "../lib/prisma";
 import { catchAsync } from "../utils/catchAsync";
@@ -13,16 +13,16 @@ declare global {
 				email: string;
 				name: string;
 				userId: string;
-				role: Role;
+				role: UserRole;
 			};
 		}
 	}
 }
 
-// auth(Role.ADMIN, Role.USER, Role.Author)
-// auth() => ...requiredRoles => [Role.ADMIN, Role.USER, Role.AUTHOR]
-export const auth = (...requiredRoles: Role[]) => {
-	return catchAsync(async (req: Request, res: Response, next: NextFunction) => {
+// auth(UserRole.ADMIN, UserRole.ORGANIZER)
+// auth() => no role restriction, but the user must still be authenticated.
+export const auth = (...requiredRoles: UserRole[]) => {
+	return catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
 		const token = req.cookies.accessToken
 			? req.cookies.accessToken
 			: req.headers.authorization?.startsWith("Bearer ")
@@ -42,8 +42,9 @@ export const auth = (...requiredRoles: Role[]) => {
 		}
 
 		const { email, name, userId, role } = verifiedToken.data as JwtPayload;
+		const userRole = role as UserRole;
 
-		if (requiredRoles.length && !requiredRoles.includes(role)) {
+		if (requiredRoles.length && !requiredRoles.includes(userRole)) {
 			throw new Error(
 				"Forbidden. You don't have permission to access this resource.",
 			);
@@ -54,7 +55,7 @@ export const auth = (...requiredRoles: Role[]) => {
 				id: userId,
 				email,
 				name,
-				role,
+				role: userRole,
 			},
 		});
 
@@ -70,7 +71,7 @@ export const auth = (...requiredRoles: Role[]) => {
 			email,
 			name,
 			userId,
-			role,
+			role: userRole,
 		};
 
 		next();
