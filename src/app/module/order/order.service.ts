@@ -471,7 +471,7 @@ const verifyAndFinalize = async (invoiceId: string) => {
       items: order.items,
     });
 
-    return tx.order.findUnique({
+    const updatedOrder = await tx.order.findUnique({
       where: { id: order.id },
       include: {
         payment: true,
@@ -479,7 +479,9 @@ const verifyAndFinalize = async (invoiceId: string) => {
         items: true,
         event: true,
       },
-    }).then((updatedOrder) => ({ updatedOrder, tickets }));
+    });
+
+    return { updatedOrder, tickets };
   });
 
   await createNotification({
@@ -497,7 +499,7 @@ const verifyAndFinalize = async (invoiceId: string) => {
     html: `<h2>Payment confirmed</h2><p>Your order for ${order.event.title} is confirmed. Your digital tickets are now available in EventFlow.</p>`,
   });
 
-  return { order: result, alreadyProcessed: false };
+  return { order: result.updatedOrder, alreadyProcessed: false };
 };
 
 const cancelGatewayPayment = async (invoiceId?: string) => {

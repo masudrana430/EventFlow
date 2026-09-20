@@ -445,9 +445,50 @@ const cancel = async (
     },
   });
 
-  await prisma.ticket.updateMany({
-    where: { eventId, status: "VALID" },
-    data: { status: "CANCELLED" },
+  await prisma.$transaction(async (tx) => {
+    await tx.ticket.updateMany({
+      where: { eventId, status: "VALID" },
+      data: { status: "CANCELLED" },
+    });
+
+    const paidOrders = await tx.order.findMany({
+      where: {
+        eventId,
+        status: {
+          in: ["PAID", "COMPLETED", "PARTIALLY_REFUNDED"],
+        },
+      },
+      include: {
+        refunds: true,
+      },
+    });
+
+    for (const order of paidOrders) {
+      const hasCancellationRefund = order.refunds.some(
+        (refund) =>
+          refund.ticketId === null &&
+          ["REQUESTED", "APPROVED", "PROCESSING", "REFUNDED"].includes(
+            refund.status,
+          ),
+      );
+
+      if (hasCancellationRefund) continue;
+
+      await tx.refund.create({
+        data: {
+          orderId: order.id,
+          eventId,
+          attendeeId: order.attendeeId,
+          reason: `Event cancelled: ${reason}`,
+          requestedAmount: order.total,
+          approvedAmount: order.total,
+          status: "PROCESSING",
+          decisionByUserId: userId,
+          decisionReason:
+            "Full refund automatically approved because the event was cancelled",
+        },
+      });
+    }
   });
 
   await writeAuditLog({

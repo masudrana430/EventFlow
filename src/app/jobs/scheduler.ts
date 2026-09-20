@@ -61,6 +61,17 @@ const updateEventLifecycle = async () => {
 
   await prisma.event.updateMany({
     where: {
+      status: EventStatus.APPROVED,
+      publishAt: { lte: now },
+    },
+    data: {
+      status: EventStatus.PUBLISHED,
+      publishedAt: now,
+    },
+  });
+
+  await prisma.event.updateMany({
+    where: {
       status: EventStatus.PUBLISHED,
       startDateTime: { lte: now },
     },
@@ -105,6 +116,77 @@ const expireInvitations = async () => {
   });
 };
 
+const offerWaitlistInventory = async () => {
+  const waiting = await prisma.waitlistEntry.findMany({
+    where: {
+      status: "WAITING",
+      ticketType: {
+        isDeleted: false,
+        isVisible: true,
+      },
+    },
+    include: {
+      attendee: true,
+      ticketType: true,
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100,
+  });
+
+  const offeredTypes = new Set<string>();
+
+  for (const entry of waiting) {
+    if (offeredTypes.has(entry.ticketTypeId)) continue;
+
+    const available =
+      entry.ticketType.quantity -
+      entry.ticketType.soldQuantity -
+      entry.ticketType.reservedQuantity;
+
+    if (available <= 0) continue;
+
+    const offeredAt = new Date();
+    const offerExpiresAt = new Date(offeredAt.getTime() + 15 * 60 * 1000);
+
+    const updated = await prisma.waitlistEntry.updateMany({
+      where: {
+        id: entry.id,
+        status: "WAITING",
+      },
+      data: {
+        status: "OFFERED",
+        offeredAt,
+        offerExpiresAt,
+      },
+    });
+
+    if (updated.count) {
+      offeredTypes.add(entry.ticketTypeId);
+      await prisma.notification.create({
+        data: {
+          userId: entry.attendee.userId,
+          type: "WAITLIST_OFFER",
+          title: "Ticket inventory is available",
+          message:
+            "A ticket became available. Complete checkout soon before someone else buys it.",
+          resourceType: "TicketType",
+          resourceId: entry.ticketTypeId,
+        },
+      });
+    }
+  }
+
+  await prisma.waitlistEntry.updateMany({
+    where: {
+      status: "OFFERED",
+      offerExpiresAt: { lte: new Date() },
+    },
+    data: {
+      status: "EXPIRED",
+    },
+  });
+};
+
 const releaseEligiblePayouts = async () => {
   const cutoff = new Date(
     Date.now() - config.payout_hold_days * 24 * 60 * 60 * 1000,
@@ -137,6 +219,7 @@ export const startBackgroundJobs = () => {
       await expireReservations();
       await updateEventLifecycle();
       await expireInvitations();
+      await offerWaitlistInventory();
       await releaseEligiblePayouts();
     } catch (error) {
       console.error("Background job failed:", error);
