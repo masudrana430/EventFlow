@@ -1,0 +1,55 @@
+name: Generate Migration Preview
+
+on:
+  push:
+    branches:
+      - feature/complete-eventflow-backend
+
+jobs:
+  migration-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: eventflow_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/eventflow_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/eventflow_ci
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm install
+
+      - name: Generate differential migration SQL
+        run: |
+          mkdir -p migration-preview
+          npx prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema prisma/schema \
+            --script \
+            --output migration-preview/migration.sql
+
+      - name: Upload migration SQL
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventflow-migration-preview
+          path: migration-preview/migration.sql
