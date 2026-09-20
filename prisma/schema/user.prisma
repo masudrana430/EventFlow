@@ -4,6 +4,9 @@ model User {
   email    String @unique
   password String?
 
+  personalEmail String?
+  phone         String?
+
   role         UserRole
   status       UserStatus   @default(ACTIVE)
   authProvider AuthProvider @default(CREDENTIALS)
@@ -12,6 +15,7 @@ model User {
   googleId           String? @unique
   mustChangePassword Boolean @default(false)
   lastLoginAt        DateTime?
+  createdByUserId    String?
 
   imageUrl      String @default("")
   imagePublicId String @default("")
