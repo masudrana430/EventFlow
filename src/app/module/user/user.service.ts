@@ -105,6 +105,56 @@ const uploadProfileImage = async (
 	return updatedUser;
 };
 
+const updateMyProfile = async (
+  userId: string,
+  payload: {
+    name?: string;
+    phone?: string | null;
+    attendee?: {
+      phone?: string | null;
+      location?: string | null;
+    };
+  },
+) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { attendee: true },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(payload.name ? { name: payload.name } : {}),
+      ...("phone" in payload ? { phone: payload.phone } : {}),
+      ...(payload.attendee && user.attendee
+        ? {
+            attendee: {
+              update: {
+                ...("phone" in payload.attendee
+                  ? { phone: payload.attendee.phone }
+                  : {}),
+                ...("location" in payload.attendee
+                  ? { location: payload.attendee.location }
+                  : {}),
+              },
+            },
+          }
+        : {}),
+    },
+    include: {
+      attendee: true,
+      organizer: true,
+      eventStaff: true,
+    },
+    omit: { password: true },
+  });
+};
+
 export const UserServices = {
-	uploadProfileImage,
+  uploadProfileImage,
+  updateMyProfile,
 };

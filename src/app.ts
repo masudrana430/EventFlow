@@ -6,6 +6,7 @@ import swaggerUi from "swagger-ui-express";
 import config from "./app/config";
 import { openApiSpec } from "./app/docs/openapi";
 import { globalErrorHandler } from "./app/middleware/globalErrorHandler";
+import { csrfGuard } from "./app/middleware/csrfGuard";
 import { notFound } from "./app/middleware/notFound";
 import { AdminRoutes } from "./app/module/admin/admin.route";
 import { AnalyticsRoutes } from "./app/module/analytics/analytics.route";
@@ -42,6 +43,7 @@ app.use(
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
+app.use(csrfGuard);
 
 app.get("/api-docs.json", (_req: Request, res: Response) => {
   res.status(httpStatus.OK).json(openApiSpec);

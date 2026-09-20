@@ -13,6 +13,10 @@ const uploadProfileImage = catchAsync(
 			throw new Error("No file uploaded");
 		}
 
+    if (!req.file.mimetype.startsWith("image/")) {
+      throw new Error("Profile image must be an image file");
+    }
+
 		const userId = req.user?.userId;
 
 		if (!userId) {
@@ -35,6 +39,23 @@ const uploadProfileImage = catchAsync(
 	},
 );
 
+const updateMyProfile = catchAsync(async (req: Request, res: Response) => {
+  const userId = req.user?.userId;
+  if (!userId) {
+    throw new Error("User not authenticated");
+  }
+
+  const result = await UserServices.updateMyProfile(userId, req.body);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: "Profile updated successfully",
+    data: result,
+  });
+});
+
 export const UserController = {
-	uploadProfileImage,
+  uploadProfileImage,
+  updateMyProfile,
 };
