@@ -108,9 +108,9 @@ const request = async (userId: string, eventId: string) => {
   const existing = await prisma.payout.findUnique({ where: { eventId } });
   if (
     existing &&
-    ![PayoutStatus.PENDING, PayoutStatus.ELIGIBLE, PayoutStatus.FAILED].includes(
-      existing.status,
-    )
+    existing.status !== PayoutStatus.PENDING &&
+    existing.status !== PayoutStatus.ELIGIBLE &&
+    existing.status !== PayoutStatus.FAILED
   ) {
     throw new AppError(httpStatus.CONFLICT, "Payout is already being processed");
   }

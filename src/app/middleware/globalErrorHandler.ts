@@ -12,7 +12,7 @@ export const globalErrorHandler = (
 ) => {
   console.error("EventFlow error:", err);
 
-  let statusCode = httpStatus.INTERNAL_SERVER_ERROR;
+  let statusCode: number = httpStatus.INTERNAL_SERVER_ERROR;
   let message = "Internal Server Error";
   let name = "Internal Server Error";
 

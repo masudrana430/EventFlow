@@ -128,7 +128,7 @@ const updateUserStatus = async (
   }
 
   if (
-    [UserRole.ADMIN, UserRole.SUPER_ADMIN].includes(target.role) &&
+    (target.role === UserRole.ADMIN || target.role === UserRole.SUPER_ADMIN) &&
     actor.role !== UserRole.SUPER_ADMIN
   ) {
     throw new AppError(

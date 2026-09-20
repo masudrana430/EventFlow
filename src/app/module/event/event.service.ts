@@ -129,7 +129,11 @@ const update = async (
 ) => {
   const event = await getOwnedEvent(userId, eventId);
 
-  if ([EventStatus.PENDING_REVIEW, EventStatus.COMPLETED, EventStatus.CANCELLED].includes(event.status)) {
+  if (
+    event.status === EventStatus.PENDING_REVIEW ||
+    event.status === EventStatus.COMPLETED ||
+    event.status === EventStatus.CANCELLED
+  ) {
     throw new AppError(httpStatus.CONFLICT, "This event cannot be edited in its current status");
   }
 
@@ -155,7 +159,9 @@ const update = async (
   }
 
   if (
-    [EventStatus.APPROVED, EventStatus.PUBLISHED, EventStatus.ONGOING].includes(event.status) &&
+    (event.status === EventStatus.APPROVED ||
+      event.status === EventStatus.PUBLISHED ||
+      event.status === EventStatus.ONGOING) &&
     payload.categoryId
   ) {
     throw new AppError(httpStatus.CONFLICT, "Category is locked after approval");
@@ -273,7 +279,11 @@ const uploadGallery = async (
 const submitForReview = async (userId: string, eventId: string) => {
   const event = await getOwnedEvent(userId, eventId);
 
-  if (![EventStatus.DRAFT, EventStatus.CHANGES_REQUESTED, EventStatus.REJECTED].includes(event.status)) {
+  if (
+    event.status !== EventStatus.DRAFT &&
+    event.status !== EventStatus.CHANGES_REQUESTED &&
+    event.status !== EventStatus.REJECTED
+  ) {
     throw new AppError(httpStatus.CONFLICT, "Event cannot be submitted from its current status");
   }
 
