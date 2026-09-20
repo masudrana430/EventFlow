@@ -205,9 +205,15 @@ const markRefunded = async (
     where: { id: refundId },
     include: {
       ticket: true,
-      order: { include: { tickets: true } },
+      order: {
+        include: {
+          tickets: true,
+          payment: true,
+        },
+      },
     },
   });
+
   if (!refund) throw new AppError(httpStatus.NOT_FOUND, "Refund not found");
   if (refund.status !== RefundStatus.PROCESSING) {
     throw new AppError(httpStatus.CONFLICT, "Refund is not in processing state");
@@ -233,25 +239,62 @@ const markRefunded = async (
         where: { id: refund.ticket.ticketTypeId },
         data: { soldQuantity: { decrement: 1 } },
       });
+    } else {
+      const activeTickets = refund.order.tickets.filter(
+        (ticket) =>
+          ticket.status !== TicketStatus.REFUNDED &&
+          ticket.status !== TicketStatus.VOID &&
+          ticket.status !== TicketStatus.TRANSFERRED,
+      );
+
+      for (const ticket of activeTickets) {
+        await tx.ticket.update({
+          where: { id: ticket.id },
+          data: { status: TicketStatus.REFUNDED },
+        });
+
+        await tx.ticketType.update({
+          where: { id: ticket.ticketTypeId },
+          data: { soldQuantity: { decrement: 1 } },
+        });
+      }
     }
 
-    const remainingActive = refund.order.tickets.filter(
-      (ticket) =>
-        ticket.id !== refund.ticketId &&
-        ticket.status !== TicketStatus.REFUNDED &&
-        ticket.status !== TicketStatus.CANCELLED &&
-        ticket.status !== TicketStatus.VOID,
-    ).length;
+    const remainingActive = await tx.ticket.count({
+      where: {
+        orderId: refund.orderId,
+        status: {
+          notIn: [
+            TicketStatus.REFUNDED,
+            TicketStatus.CANCELLED,
+            TicketStatus.VOID,
+            TicketStatus.TRANSFERRED,
+          ],
+        },
+      },
+    });
+
+    const fullyRefunded = remainingActive === 0;
 
     await tx.order.update({
       where: { id: refund.orderId },
       data: {
-        status:
-          remainingActive === 0
-            ? OrderStatus.REFUNDED
-            : OrderStatus.PARTIALLY_REFUNDED,
+        status: fullyRefunded
+          ? OrderStatus.REFUNDED
+          : OrderStatus.PARTIALLY_REFUNDED,
       },
     });
+
+    if (refund.order.payment) {
+      await tx.payment.update({
+        where: { id: refund.order.payment.id },
+        data: {
+          status: fullyRefunded
+            ? "REFUNDED"
+            : "PARTIALLY_REFUNDED",
+        },
+      });
+    }
 
     return updated;
   });
@@ -264,12 +307,13 @@ const markRefunded = async (
     newValue: { gatewayRefundId },
   });
 
-  const user = await prisma.attendee.findUnique({
+  const attendee = await prisma.attendee.findUnique({
     where: { id: refund.attendeeId },
   });
-  if (user) {
+
+  if (attendee) {
     await createNotification({
-      userId: user.userId,
+      userId: attendee.userId,
       type: "REFUND_COMPLETED",
       title: "Refund completed",
       message: "Your EventFlow refund has been completed.",

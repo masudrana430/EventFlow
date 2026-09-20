@@ -141,10 +141,21 @@ const finalizeFreeOrder = async (orderId: string) =>
       throw new AppError(httpStatus.CONFLICT, "Order is no longer payable");
     }
 
-    await tx.ticketReservation.update({
-      where: { id: order.reservationId },
+    const reservationClaimed = await tx.ticketReservation.updateMany({
+      where: {
+        id: order.reservationId,
+        status: ReservationStatus.ACTIVE,
+        expiresAt: { gt: new Date() },
+      },
       data: { status: ReservationStatus.CONVERTED },
     });
+
+    if (!reservationClaimed.count) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        "Ticket reservation expired before confirmation",
+      );
+    }
 
     await tx.ticketType.update({
       where: { id: order.reservation.ticketTypeId },
@@ -438,18 +449,33 @@ const verifyAndFinalize = async (invoiceId: string) => {
       };
     }
 
-    await tx.order.update({
-      where: { id: order.id },
+    const orderClaimed = await tx.order.updateMany({
+      where: {
+        id: order.id,
+        status: OrderStatus.PENDING,
+        expiresAt: { gt: new Date() },
+      },
       data: {
         status: OrderStatus.PAID,
         paidAt: new Date(),
       },
     });
 
-    await tx.ticketReservation.update({
-      where: { id: order.reservationId },
+    const reservationClaimed = await tx.ticketReservation.updateMany({
+      where: {
+        id: order.reservationId,
+        status: ReservationStatus.ACTIVE,
+        expiresAt: { gt: new Date() },
+      },
       data: { status: ReservationStatus.CONVERTED },
     });
+
+    if (!orderClaimed.count || !reservationClaimed.count) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        "Order reservation expired before payment verification completed",
+      );
+    }
 
     await tx.ticketType.update({
       where: { id: order.reservation.ticketTypeId },
