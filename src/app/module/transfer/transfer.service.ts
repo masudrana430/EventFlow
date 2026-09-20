@@ -47,10 +47,11 @@ const create = async (
     throw new AppError(httpStatus.CONFLICT, "Ticket can no longer be transferred");
   }
   if (
-    ticket.refunds.some((refund) =>
-      [RefundStatus.REQUESTED, RefundStatus.APPROVED, RefundStatus.PROCESSING].includes(
-        refund.status,
-      ),
+    ticket.refunds.some(
+      (refund) =>
+        refund.status === RefundStatus.REQUESTED ||
+        refund.status === RefundStatus.APPROVED ||
+        refund.status === RefundStatus.PROCESSING,
     )
   ) {
     throw new AppError(httpStatus.CONFLICT, "Ticket has an active refund request");

@@ -423,10 +423,19 @@ const verifyAndFinalize = async (invoiceId: string) => {
     });
 
     if (!claimed.count) {
-      return tx.order.findUnique({
+      const updatedOrder = await tx.order.findUnique({
         where: { id: order.id },
-        include: { tickets: true, payment: true },
+        include: {
+          payment: true,
+          tickets: true,
+          items: true,
+          event: true,
+        },
       });
+      return {
+        updatedOrder,
+        tickets: updatedOrder?.tickets ?? [],
+      };
     }
 
     await tx.order.update({
@@ -498,6 +507,13 @@ const verifyAndFinalize = async (invoiceId: string) => {
     subject: `EventFlow order ${order.orderNumber} confirmed`,
     html: `<h2>Payment confirmed</h2><p>Your order for ${order.event.title} is confirmed. Your digital tickets are now available in EventFlow.</p>`,
   });
+
+  if (!result.updatedOrder) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      "Order disappeared during payment processing",
+    );
+  }
 
   return { order: result.updatedOrder, alreadyProcessed: false };
 };

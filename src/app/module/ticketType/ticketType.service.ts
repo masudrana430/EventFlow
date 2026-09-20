@@ -23,7 +23,12 @@ const create = async (
 ) => {
   const event = await EventService.getOwnedEvent(userId, eventId);
 
-  if (![EventStatus.DRAFT, EventStatus.CHANGES_REQUESTED, EventStatus.REJECTED, EventStatus.APPROVED].includes(event.status)) {
+  if (
+    event.status !== EventStatus.DRAFT &&
+    event.status !== EventStatus.CHANGES_REQUESTED &&
+    event.status !== EventStatus.REJECTED &&
+    event.status !== EventStatus.APPROVED
+  ) {
     throw new AppError(httpStatus.CONFLICT, "Ticket types cannot be added now");
   }
 

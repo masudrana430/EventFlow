@@ -76,10 +76,11 @@ const request = async (
     throw new AppError(httpStatus.CONFLICT, "Only valid unused tickets can be refunded");
   }
   if (
-    ticket.refunds.some((refund) =>
-      [RefundStatus.REQUESTED, RefundStatus.APPROVED, RefundStatus.PROCESSING].includes(
-        refund.status,
-      ),
+    ticket.refunds.some(
+      (refund) =>
+        refund.status === RefundStatus.REQUESTED ||
+        refund.status === RefundStatus.APPROVED ||
+        refund.status === RefundStatus.PROCESSING,
     )
   ) {
     throw new AppError(httpStatus.CONFLICT, "A refund request is already active");
@@ -237,9 +238,9 @@ const markRefunded = async (
     const remainingActive = refund.order.tickets.filter(
       (ticket) =>
         ticket.id !== refund.ticketId &&
-        ![TicketStatus.REFUNDED, TicketStatus.CANCELLED, TicketStatus.VOID].includes(
-          ticket.status,
-        ),
+        ticket.status !== TicketStatus.REFUNDED &&
+        ticket.status !== TicketStatus.CANCELLED &&
+        ticket.status !== TicketStatus.VOID,
     ).length;
 
     await tx.order.update({
