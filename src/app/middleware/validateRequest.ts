@@ -1,25 +1,20 @@
 import type { NextFunction, Request, Response } from "express";
+import httpStatus from "http-status";
 import type { z } from "zod";
+import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
 
-export const validateRequest = (zodSchema: z.ZodType) => {
-  return catchAsync(
-    async (req: Request, _res: Response, next: NextFunction) => {
-      const payload = req.body ?? {};
+export const validateRequest = (schema: z.ZodType) =>
+  catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
+    const result = await schema.safeParseAsync(req.body ?? {});
 
-      const result = await zodSchema.safeParseAsync(payload);
+    if (!result.success) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        result.error.issues[0]?.message ?? "Validation failed",
+      );
+    }
 
-      if (!result.success) {
-        console.log(result.error);
-        console.log(result.error.issues);
-
-        throw new Error(result.error.issues[0]?.message ?? "Validation failed");
-      }
-
-      // validated + transformed/sanitized data
-      req.body = result.data;
-
-      next();
-    },
-  );
-};
+    req.body = result.data;
+    next();
+  });
