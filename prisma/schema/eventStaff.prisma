@@ -9,6 +9,7 @@ model EventStaff {
 
   invitationStatus    StaffInvitationStatus @default(PENDING)
   invitationExpiresAt DateTime?
+  invitationTokenHash String? @unique
   acceptedAt          DateTime?
 
   createdAt DateTime @default(now())

@@ -61,6 +61,7 @@ model Event {
 
   submittedAt DateTime?
   approvedAt  DateTime?
+  publishAt   DateTime?
   publishedAt DateTime?
   completedAt DateTime?
   cancelledAt DateTime?
