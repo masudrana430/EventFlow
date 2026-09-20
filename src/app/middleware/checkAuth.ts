@@ -16,10 +16,18 @@ declare global {
         name: string;
         userId: string;
         role: UserRole;
+        sessionId?: string;
       };
     }
   }
 }
+
+const mustChangeAllowedPaths = new Set([
+  "/api/v1/auth/me",
+  "/api/v1/auth/change-password",
+  "/api/v1/auth/logout",
+  "/api/v1/auth/logout-all",
+]);
 
 export const auth = (...requiredRoles: UserRole[]) =>
   catchAsync(async (req: Request, _res: Response, next: NextFunction) => {
@@ -39,25 +47,27 @@ export const auth = (...requiredRoles: UserRole[]) =>
       throw new AppError(httpStatus.UNAUTHORIZED, "Invalid or expired access token");
     }
 
-    const { email, name, userId, role } = verified.data as JwtPayload & {
+    const tokenData = verified.data as JwtPayload & {
       email: string;
       name: string;
       userId: string;
       role: UserRole;
+      sid?: string;
     };
 
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: tokenData.userId },
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
         status: true,
+        mustChangePassword: true,
       },
     });
 
-    if (!user || user.email !== email) {
+    if (!user || user.email !== tokenData.email) {
       throw new AppError(httpStatus.UNAUTHORIZED, "User no longer exists");
     }
 
@@ -69,11 +79,22 @@ export const auth = (...requiredRoles: UserRole[]) =>
       throw new AppError(httpStatus.FORBIDDEN, "You do not have permission for this action");
     }
 
+    if (
+      user.mustChangePassword &&
+      !mustChangeAllowedPaths.has(req.originalUrl.split("?")[0])
+    ) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        "You must change your temporary password before using this feature",
+      );
+    }
+
     req.user = {
       email: user.email,
       name: user.name,
       userId: user.id,
       role: user.role,
+      sessionId: tokenData.sid,
     };
 
     next();

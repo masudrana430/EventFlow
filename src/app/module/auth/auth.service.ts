@@ -1,468 +1,338 @@
-/** biome-ignore-all lint/correctness/noUnusedImports: <explanation> */
-/** biome-ignore-all assist/source/organizeImports: <explanation> */
-/** biome-ignore-all lint/style/useNodejsImportProtocol: <explanation> */
-/** biome-ignore-all lint/style/useImportType: <explanation> */
 import bcrypt from "bcryptjs";
-import type { JwtPayload, SignOptions } from "jsonwebtoken";
+import crypto from "node:crypto";
+import httpStatus from "http-status";
+import jwt, { type JwtPayload, type SignOptions } from "jsonwebtoken";
 import {
+  AuthProvider,
   OrganizerApprovalStatus,
   StaffInvitationStatus,
   UserRole,
   UserStatus,
 } from "../../../generated/prisma/enums";
 import config from "../../config";
+import { googleClient } from "../../lib/googleAuth";
 import { prisma } from "../../lib/prisma";
+import { redisClient } from "../../lib/redis";
+import { AppError } from "../../utils/AppError";
+import { sendEmail, safeSendEmail } from "../../utils/email";
 import { jwtUtils } from "../../utils/jwt";
+import { sha256 } from "../../utils/security";
 import type {
+  IChangePasswordPayload,
   IForgotPasswordPayload,
+  IGoogleLoginPayload,
   ILoginUserPayload,
   IRegisterAttendeePayload,
   IRequestUser,
   IResetPasswordPayload,
+  ISessionMeta,
+  ISetPasswordPayload,
   IVerifyEmailPayload,
 } from "./auth.interface";
-import { OAuth2Client, TokenPayload } from "google-auth-library";
-import { googleClient } from "../../lib/googleAuth";
 
-import { redisClient } from "../../lib/redis";
-import crypto from "crypto";
-import { transporter } from "../../lib/nodeMailer";
-import path from "path/win32";
-import ejs from "ejs";
+const OTP_TTL_SECONDS = 10 * 60;
+const OTP_COOLDOWN_SECONDS = 60;
+const MAX_OTP_ATTEMPTS = 5;
 
-/**
- * Creates EventFlow access + refresh tokens.
- *
- * Keeping this in one function prevents us from duplicating
- * token-generation logic inside login and refresh-token.
- */
-const generateTokens = (user: {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-}) => {
-  const jwtPayload = {
+const normalizedEmail = (email: string) => email.trim().toLowerCase();
+
+const createTokens = async (
+  user: { id: string; name: string; email: string; role: UserRole },
+  meta: ISessionMeta = {},
+  existingSessionId?: string,
+) => {
+  const sessionId = existingSessionId ?? crypto.randomUUID();
+  const payload = {
     userId: user.id,
     name: user.name,
     email: user.email,
     role: user.role,
+    sid: sessionId,
   };
 
   const accessToken = jwtUtils.createToken(
-    jwtPayload,
+    payload,
     config.jwt_access_secret,
-    config.jwt_access_expires_in as SignOptions,
+    config.jwt_access_expires_in as SignOptions["expiresIn"],
   );
 
   const refreshToken = jwtUtils.createToken(
-    jwtPayload,
+    payload,
     config.jwt_refresh_secret,
-    config.jwt_refresh_expires_in as SignOptions,
+    config.jwt_refresh_expires_in as SignOptions["expiresIn"],
   );
 
-  return {
-    accessToken,
-    refreshToken,
+  const decoded = jwt.decode(refreshToken) as JwtPayload | null;
+  const expiresAt = decoded?.exp
+    ? new Date(decoded.exp * 1000)
+    : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const data = {
+    userId: user.id,
+    refreshTokenHash: sha256(refreshToken),
+    expiresAt,
+    revokedAt: null,
+    ipAddress: meta.ipAddress,
+    userAgent: meta.userAgent,
   };
+
+  if (existingSessionId) {
+    await prisma.session.update({
+      where: { id: existingSessionId },
+      data,
+    });
+  } else {
+    await prisma.session.create({
+      data: {
+        id: sessionId,
+        ...data,
+      },
+    });
+  }
+
+  return { accessToken, refreshToken };
 };
 
-/**
- * Register a normal EventFlow attendee.
- */
-const registerAttendee = async (payload: IRegisterAttendeePayload) => {
-  const { name, password, attendee: attendeeData } = payload;
-
-  const email = payload.email.trim().toLowerCase();
-
-  const isUserExists = await prisma.user.findUnique({
-    where: {
-      email,
-    },
-  });
-
-  if (isUserExists) {
-    throw new Error("User with this email already exists");
-  }
-
-  const hashedPassword = await bcrypt.hash(
-    password,
-    Number(config.bcrypt_salt_rounds),
-  );
-
-  const expirationSeconds = 5 * 60;
-
-  // --------------------------
-  // Generate OTP
-  // --------------------------
-
-  const otp = crypto.randomInt(100000, 1000000).toString();
-
-  const otpKey = `registration-otp:${email}`;
-
-  await redisClient.set(otpKey, otp, {
-    expiration: {
-      type: "EX",
-      value: expirationSeconds,
-    },
-  });
-
-  // --------------------------
-  // Store temporary user data
-  // --------------------------
-
-  const registrationDataKey = `attendee-registration-data:${email}`;
-
-  const redisUserDataPayload = {
-    name,
-    email,
-    password: hashedPassword,
-
-    attendee: {
-      phone: attendeeData?.phone,
-      location: attendeeData?.location,
-    },
-  };
-
-  await redisClient.set(
-    registrationDataKey,
-    JSON.stringify(redisUserDataPayload),
-    {
-      expiration: {
-        type: "EX",
-        value: expirationSeconds,
-      },
-    },
-  );
-
-  // --------------------------
-  // Render EJS email
-  // --------------------------
-
-  const templatePath = path.join(
-    process.cwd(),
-    "src/app/templates/registration-user-otp.ejs",
-  );
-
-  const templateData = {
-    name,
-    email,
-    otp,
-    expirationMinutes: expirationSeconds / 60,
-    year: new Date().getFullYear(),
-  };
-
-  const html = await ejs.renderFile(templatePath, templateData);
-
-  // --------------------------
-  // Send OTP email
-  // --------------------------
-
-  await transporter.sendMail({
-    from: `"EventFlow" <${config.email_sender}>`,
-    to: email,
-    replyTo: `"EventFlow Support" <${config.email_sender}>`,
-    subject: "Verify Your EventFlow Account",
-    html,
-  });
-
-  /**
-    const createdUser = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword,
-
-      role: UserRole.ATTENDEE,
-      status: UserStatus.ACTIVE,
-
-      isEmailVerified: false,
-
-      attendee: {
-        create: {
-          phone: attendeeData?.phone || "",
-          location: attendeeData?.location || "",
-        },
-      },
-    },
-
-    omit: {
-      password: true,
-    },
-
-    include: {
-      attendee: true,
-    },
-  });
-
-  const { attendee, ...user } = createdUser;
-
-  const { accessToken, refreshToken } = generateTokens(user);
-
-  return {
-    accessToken,
-    refreshToken,
-    user,
-    attendee,
-  };
-   */
-};
-
-/**
- * Verify an attendee's email.
- * Register
-   ↓
-Store hashed registration data in Redis
-   ↓
-Store registration OTP in Redis
-   ↓
-Send OTP
-   ↓
-POST /verify-email
-   ↓
-Validate email + OTP with Zod
-   ↓
-Read OTP from Redis
-   ↓
-Read registration data from Redis
-   ↓
-Compare OTP
-   ↓
-Create User + Attendee in PostgreSQL
-   ↓
-Delete Redis keys
-   ↓
-Generate JWT
-   ↓
-Set cookies
-   ↓
-Registration complete ✅
- */
-const verifyAttendeeEmail = async (payload: IVerifyEmailPayload) => {
-  const email = payload.email.trim().toLowerCase();
-
-  const otp = payload.otp;
-
-  // Check whether account was already created
-  const isUserExist = await prisma.user.findUnique({
-    where: {
-      email,
-    },
-  });
-
-  if (isUserExist) {
-    if (isUserExist.isEmailVerified) {
-      throw new Error("Email is already verified");
-    }
-
-    throw new Error("User with this email already exists");
-  }
-
-  // ----------------------------
-  // Redis keys
-  // ----------------------------
-
-  const otpKey = `registration-otp:${email}`;
-
-  const attendeeRegistrationKey = `attendee-registration-data:${email}`;
-
-  // ----------------------------
-  // Get OTP
-  // ----------------------------
-
-  const redisOtp = await redisClient.get(otpKey);
-
-  if (!redisOtp) {
-    throw new Error("OTP has expired or is invalid");
-  }
-
-  if (redisOtp !== otp) {
-    throw new Error("OTP does not match");
-  }
-
-  // ----------------------------
-  // Get temporary registration data
-  // ----------------------------
-
-  const redisAttendeeData = await redisClient.get(attendeeRegistrationKey);
-
-  if (!redisAttendeeData) {
-    throw new Error("Registration data has expired");
-  }
-
-  const attendeePayload: IRegisterAttendeePayload =
-    JSON.parse(redisAttendeeData);
-
-  // ----------------------------
-  // Create verified user
-  // ----------------------------
-
-  const createdUser = await prisma.user.create({
-    data: {
-      name: attendeePayload.name,
-
-      email: attendeePayload.email,
-
-      // Already hashed during registration
-      password: attendeePayload.password,
-
-      role: UserRole.ATTENDEE,
-
-      status: UserStatus.ACTIVE,
-
-      isEmailVerified: true,
-
-      attendee: {
-        create: {
-          phone: attendeePayload.attendee?.phone,
-
-          location: attendeePayload.attendee?.location,
-        },
-      },
-    },
-
-    omit: {
-      password: true,
-    },
-
-    include: {
-      attendee: true,
-    },
-  });
-
-  // ----------------------------
-  // Delete temporary Redis data
-  // only AFTER successful DB creation
-  // ----------------------------
-
-  await redisClient.del(otpKey);
-
-  await redisClient.del(attendeeRegistrationKey);
-
-  // --------------------------
-  // Render EJS email
-  // --------------------------
-
-  const templatePath = path.join(
-    process.cwd(),
-    "src/app/templates/patient-welcome-email.ejs",
-  );
-
-  const templateData = {
-    name : createdUser.name,
-    year: new Date().getFullYear()
-  };
-
-  const html = await ejs.renderFile(templatePath, templateData);
-
-  // --------------------------
-  // Send OTP email
-  // --------------------------
-
-  await transporter.sendMail({
-    from: `"EventFlow" <${config.email_sender}>`,
-    to: email,
-    replyTo: `"EventFlow Support" <${config.email_sender}>`,
-    subject: "Welcome to EventFlow! Your Account is Verified",
-    html,
-  });
-
-  // ----------------------------
-  // Generate JWT
-  // ----------------------------
-
-  const { attendee, ...user } = createdUser;
-
-  const { accessToken, refreshToken } = generateTokens(user);
-
-  return {
-    accessToken,
-    refreshToken,
-    user,
-    attendee,
-  };
-};
-/**
- * Login with email + password.
- */
-const loginUser = async (payload: ILoginUserPayload) => {
-  const { password } = payload;
-
-  const email = payload.email.trim().toLowerCase();
-
-  const user = await prisma.user.findUnique({
-    where: { email },
-
-    include: {
-      organizer: true,
-      eventStaff: true,
-    },
-  });
-
-  if (!user) {
-    throw new Error("User not found");
-  }
-
-  if (user.status === UserStatus.BLOCKED) {
-    throw new Error("User is blocked");
-  }
-
-  /**
-   * Attendee and Organizer are self-registration flows.
-   * They must verify their email before normal login.
-   */
-  if (
-    (user.role === UserRole.ATTENDEE || user.role === UserRole.ORGANIZER) &&
-    !user.isEmailVerified
-  ) {
-    throw new Error("Please verify your email before logging in");
-  }
-
-  /**
-   * A Google-only attendee may not have a password.
-   */
-  if (!user.password) {
-    throw new Error(
-      "Password login is not available for this account. Please use Google login or set a password.",
+const issueOtp = async (
+  prefix: string,
+  email: string,
+  subject: string,
+  html: (otp: string) => string,
+) => {
+  if (!redisClient.isOpen) {
+    throw new AppError(
+      httpStatus.SERVICE_UNAVAILABLE,
+      "OTP service is temporarily unavailable",
     );
   }
 
-  const isPasswordMatched = await bcrypt.compare(
-    password,
-    user.password as string,
-  );
-
-  if (!isPasswordMatched) {
-    throw new Error("Invalid credentials");
+  const cooldownKey = `${prefix}:cooldown:${email}`;
+  if (await redisClient.exists(cooldownKey)) {
+    throw new AppError(
+      httpStatus.TOO_MANY_REQUESTS,
+      "Please wait 60 seconds before requesting another OTP",
+    );
   }
 
-  /**
-   * Organizer cannot log in until Admin/Super Admin approves them.
-   */
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  await redisClient.set(`${prefix}:otp:${email}`, otp, {
+    expiration: { type: "EX", value: OTP_TTL_SECONDS },
+  });
+  await redisClient.set(cooldownKey, "1", {
+    expiration: { type: "EX", value: OTP_COOLDOWN_SECONDS },
+  });
+  await redisClient.del(`${prefix}:attempts:${email}`);
+
+  await sendEmail({
+    to: email,
+    subject,
+    html: html(otp),
+  });
+};
+
+const verifyOtp = async (prefix: string, email: string, otp: string) => {
+  const attemptsKey = `${prefix}:attempts:${email}`;
+  const attempts = await redisClient.incr(attemptsKey);
+  if (attempts === 1) {
+    await redisClient.expire(attemptsKey, OTP_TTL_SECONDS);
+  }
+
+  if (attempts > MAX_OTP_ATTEMPTS) {
+    throw new AppError(
+      httpStatus.TOO_MANY_REQUESTS,
+      "Too many invalid OTP attempts",
+    );
+  }
+
+  const stored = await redisClient.get(`${prefix}:otp:${email}`);
+  if (!stored) {
+    throw new AppError(httpStatus.BAD_REQUEST, "OTP has expired");
+  }
+
+  if (stored !== otp) {
+    throw new AppError(httpStatus.BAD_REQUEST, "OTP does not match");
+  }
+
+  await redisClient.del([
+    `${prefix}:otp:${email}`,
+    attemptsKey,
+  ]);
+};
+
+const registerAttendee = async (payload: IRegisterAttendeePayload) => {
+  const email = normalizedEmail(payload.email);
+
+  if (await prisma.user.findUnique({ where: { email } })) {
+    throw new AppError(httpStatus.CONFLICT, "User with this email already exists");
+  }
+
+  if (!redisClient.isOpen) {
+    throw new AppError(
+      httpStatus.SERVICE_UNAVAILABLE,
+      "Registration service is temporarily unavailable",
+    );
+  }
+
+  const password = await bcrypt.hash(
+    payload.password,
+    config.bcrypt_salt_rounds,
+  );
+
+  await redisClient.set(
+    `attendee-registration:data:${email}`,
+    JSON.stringify({
+      name: payload.name,
+      email,
+      password,
+      attendee: payload.attendee ?? {},
+    }),
+    { expiration: { type: "EX", value: OTP_TTL_SECONDS } },
+  );
+
+  await issueOtp(
+    "attendee-registration",
+    email,
+    "Verify your EventFlow account",
+    (otp) => `
+      <h2>Verify your EventFlow account</h2>
+      <p>Your verification code is <strong>${otp}</strong>.</p>
+      <p>This code expires in 10 minutes.</p>
+    `,
+  );
+};
+
+const resendAttendeeOtp = async (emailInput: string) => {
+  const email = normalizedEmail(emailInput);
+  const data = await redisClient.get(`attendee-registration:data:${email}`);
+
+  if (!data) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "Registration data expired. Please register again",
+    );
+  }
+
+  await issueOtp(
+    "attendee-registration",
+    email,
+    "Your new EventFlow verification code",
+    (otp) => `<p>Your new EventFlow verification code is <strong>${otp}</strong>.</p>`,
+  );
+};
+
+const verifyAttendeeEmail = async (
+  payload: IVerifyEmailPayload,
+  meta: ISessionMeta,
+) => {
+  const email = normalizedEmail(payload.email);
+
+  if (await prisma.user.findUnique({ where: { email } })) {
+    throw new AppError(httpStatus.CONFLICT, "This email is already registered");
+  }
+
+  await verifyOtp("attendee-registration", email, payload.otp);
+
+  const data = await redisClient.get(`attendee-registration:data:${email}`);
+  if (!data) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Registration data has expired");
+  }
+
+  const registration = JSON.parse(data) as {
+    name: string;
+    email: string;
+    password: string;
+    attendee?: { phone?: string; location?: string };
+  };
+
+  const created = await prisma.user.create({
+    data: {
+      name: registration.name,
+      email,
+      password: registration.password,
+      role: UserRole.ATTENDEE,
+      status: UserStatus.ACTIVE,
+      authProvider: AuthProvider.CREDENTIALS,
+      isEmailVerified: true,
+      attendee: {
+        create: {
+          phone: registration.attendee?.phone,
+          location: registration.attendee?.location,
+        },
+      },
+    },
+    include: { attendee: true },
+    omit: { password: true },
+  });
+
+  await redisClient.del(`attendee-registration:data:${email}`);
+
+  const { attendee, ...user } = created;
+  const tokens = await createTokens(user, meta);
+
+  void safeSendEmail({
+    to: email,
+    subject: "Welcome to EventFlow",
+    html: `<h2>Welcome, ${user.name}!</h2><p>Your EventFlow account is verified and ready.</p>`,
+  });
+
+  return { ...tokens, user, attendee };
+};
+
+const loginUser = async (
+  payload: ILoginUserPayload,
+  meta: ISessionMeta,
+) => {
+  const email = normalizedEmail(payload.email);
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { organizer: true, eventStaff: true },
+  });
+
+  if (!user || !user.password) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Invalid email or password");
+  }
+
+  if (user.status === UserStatus.BLOCKED) {
+    throw new AppError(httpStatus.FORBIDDEN, "Your account is blocked");
+  }
+
+  if (!user.isEmailVerified) {
+    throw new AppError(httpStatus.FORBIDDEN, "Please verify your email first");
+  }
+
+  if (!(await bcrypt.compare(payload.password, user.password))) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Invalid email or password");
+  }
+
   if (
     user.role === UserRole.ORGANIZER &&
     user.organizer?.approvalStatus !== OrganizerApprovalStatus.APPROVED
   ) {
-    throw new Error("Organizer account has not been approved");
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Organizer application is not approved",
+    );
   }
 
-  /**
-   * Event Staff should not use the system until their
-   * invitation has been accepted.
-   */
   if (
     user.role === UserRole.EVENT_STAFF &&
     user.eventStaff?.invitationStatus !== StaffInvitationStatus.ACCEPTED
   ) {
-    throw new Error("Event staff invitation has not been accepted");
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Event staff invitation is not active",
+    );
   }
 
-  const { accessToken, refreshToken } = generateTokens(user);
+  const tokens = await createTokens(user, meta);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
 
   return {
-    accessToken,
-    refreshToken,
-
+    ...tokens,
     user: {
       id: user.id,
       name: user.name,
@@ -473,376 +343,326 @@ const loginUser = async (payload: ILoginUserPayload) => {
   };
 };
 
-/**
- * Return currently authenticated user.
- */
-const getMe = async (user: IRequestUser) => {
-  const isUserExists = await prisma.user.findUnique({
-    where: {
-      id: user.userId,
-    },
-
+const getMe = async (requestUser: IRequestUser) => {
+  const user = await prisma.user.findUnique({
+    where: { id: requestUser.userId },
     include: {
       attendee: true,
       organizer: true,
       eventStaff: true,
     },
-
-    omit: {
-      password: true,
-    },
+    omit: { password: true },
   });
 
-  if (!isUserExists) {
-    throw new Error("User not found");
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, "User not found");
   }
 
-  return isUserExists;
+  return user;
 };
 
-/**
- * Generate new access + refresh tokens
- * from a valid refresh token.
- */
-const refreshToken = async (token: string) => {
-  const verifiedRefreshToken = jwtUtils.verifyToken(
-    token,
-    config.jwt_refresh_secret,
-  );
-
-  if (!verifiedRefreshToken.success || !verifiedRefreshToken.data) {
-    throw new Error(
-      config.node_env === "development"
-        ? verifiedRefreshToken.error
-        : "Invalid refresh token",
-    );
+const refreshToken = async (token: string, meta: ISessionMeta) => {
+  const verified = jwtUtils.verifyToken(token, config.jwt_refresh_secret);
+  if (!verified.success || !verified.data) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Invalid refresh token");
   }
 
-  const data = verifiedRefreshToken.data as JwtPayload;
+  const data = verified.data as JwtPayload & { userId: string; sid?: string };
+  if (!data.sid) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Refresh session is invalid");
+  }
+
+  const session = await prisma.session.findUnique({
+    where: { id: data.sid },
+  });
+
+  if (
+    !session ||
+    session.revokedAt ||
+    session.expiresAt <= new Date() ||
+    session.refreshTokenHash !== sha256(token)
+  ) {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Refresh session is revoked or expired");
+  }
 
   const user = await prisma.user.findUnique({
-    where: {
-      id: data.userId,
-    },
-
-    include: {
-      organizer: true,
-      eventStaff: true,
-    },
+    where: { id: data.userId },
+    include: { organizer: true, eventStaff: true },
   });
 
   if (!user || user.status !== UserStatus.ACTIVE) {
-    throw new Error("User is inactive or not found");
+    throw new AppError(httpStatus.UNAUTHORIZED, "User is inactive");
   }
 
-  /**
-   * Don't issue fresh tokens to an unapproved organizer.
-   */
   if (
     user.role === UserRole.ORGANIZER &&
     user.organizer?.approvalStatus !== OrganizerApprovalStatus.APPROVED
   ) {
-    throw new Error("Organizer account is not approved");
+    throw new AppError(httpStatus.FORBIDDEN, "Organizer is not approved");
   }
 
-  /**
-   * Don't issue fresh tokens to revoked/unaccepted Event Staff.
-   */
-  if (
-    user.role === UserRole.EVENT_STAFF &&
-    user.eventStaff?.invitationStatus !== StaffInvitationStatus.ACCEPTED
-  ) {
-    throw new Error("Event staff account is inactive");
-  }
-
-  const { accessToken, refreshToken } = generateTokens(user);
-
-  return {
-    accessToken,
-    refreshToken,
-  };
+  return createTokens(user, meta, session.id);
 };
 
-const googleLogin = async (payload: IGoogleLoginPayload) => {
-  let googleIdTokenPayload: TokenPayload | null | undefined = null;
+const googleLogin = async (
+  payload: IGoogleLoginPayload,
+  meta: ISessionMeta,
+) => {
+  let googlePayload;
 
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: payload.idToken,
       audience: config.google_client_id,
     });
-
-    googleIdTokenPayload = ticket.getPayload();
-  } catch (error) {
-    console.error("Error verifying Google ID token:", error);
-
-    throw new Error("Invalid Google ID token");
+    googlePayload = ticket.getPayload();
+  } catch {
+    throw new AppError(httpStatus.UNAUTHORIZED, "Invalid Google ID token");
   }
 
   if (
-    !googleIdTokenPayload ||
-    !googleIdTokenPayload.email ||
-    !googleIdTokenPayload.sub ||
-    !googleIdTokenPayload.name
+    !googlePayload?.email ||
+    !googlePayload.sub ||
+    !googlePayload.name ||
+    !googlePayload.email_verified
   ) {
-    throw new Error("Google ID token payload is missing required fields");
+    throw new AppError(httpStatus.UNAUTHORIZED, "Google account is not verified");
   }
 
-  if (!googleIdTokenPayload.email_verified) {
-    throw new Error("Google email is not verified");
-  }
-
-  const email = googleIdTokenPayload.email.trim().toLowerCase();
-
-  const googleId = googleIdTokenPayload.sub;
-
-  const existingUser = await prisma.user.findUnique({
-    where: {
-      email,
-    },
-    include: {
-      attendee: true,
-    },
+  const email = normalizedEmail(googlePayload.email);
+  let user = await prisma.user.findUnique({
+    where: { email },
+    include: { attendee: true },
   });
 
-  let user = existingUser;
+  if (user && user.role !== UserRole.ATTENDEE) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Google login is available only to attendees",
+    );
+  }
+
+  if (user?.status === UserStatus.BLOCKED) {
+    throw new AppError(httpStatus.FORBIDDEN, "Your account is blocked");
+  }
+
+  if (user?.googleId && user.googleId !== googlePayload.sub) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      "This email is linked to another Google account",
+    );
+  }
 
   if (user) {
-    if (user.role !== UserRole.ATTENDEE) {
-      throw new Error("Google login is only available for attendees");
-    }
-
-    if (user.status === UserStatus.BLOCKED) {
-      throw new Error("User is blocked");
-    }
-
-    if (user.googleId && user.googleId !== googleId) {
-      throw new Error(
-        "This email is already linked with another Google account",
-      );
-    }
-
-    // Link Google account if needed
-    // and always mark Google-verified email as verified.
     user = await prisma.user.update({
-      where: {
-        id: user.id,
-      },
+      where: { id: user.id },
       data: {
-        googleId,
+        googleId: googlePayload.sub,
         isEmailVerified: true,
+        authProvider: user.password ? AuthProvider.BOTH : AuthProvider.GOOGLE,
       },
-      include: {
-        attendee: true,
-      },
+      include: { attendee: true },
     });
   } else {
     user = await prisma.user.create({
       data: {
-        name: googleIdTokenPayload.name,
+        name: googlePayload.name,
         email,
         role: UserRole.ATTENDEE,
         status: UserStatus.ACTIVE,
-
-        googleId,
+        googleId: googlePayload.sub,
+        authProvider: AuthProvider.GOOGLE,
         isEmailVerified: true,
-
         attendee: {
           create: {
-            profileImage: googleIdTokenPayload.picture,
+            profileImage: googlePayload.picture,
           },
         },
       },
-      include: {
-        attendee: true,
-      },
+      include: { attendee: true },
     });
-    // --------------------------
-  // Render EJS email
-  // --------------------------
 
-  const templatePath = path.join(
-    process.cwd(),
-    "src/app/templates/patient-welcome-email.ejs",
-  );
-
-  const templateData = {
-    name : user.name,
-    year: new Date().getFullYear()
-  };
-
-  const html = await ejs.renderFile(templatePath, templateData);
-
-  // --------------------------
-  // Send OTP email
-  // --------------------------
-
-  await transporter.sendMail({
-    from: `"EventFlow" <${config.email_sender}>`,
-    to: email,
-    replyTo: `"EventFlow Support" <${config.email_sender}>`,
-    subject: "Welcome to EventFlow! Your Account is Verified",
-    html,
-  });
+    void safeSendEmail({
+      to: email,
+      subject: "Welcome to EventFlow",
+      html: `<h2>Welcome, ${user.name}!</h2><p>Your attendee account was created with Google.</p>`,
+    });
   }
 
-  const { accessToken, refreshToken } = generateTokens(user);
-
+  const tokens = await createTokens(user, meta);
   return {
-    accessToken,
-    refreshToken,
+    ...tokens,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
   };
 };
 
 const forgotPassword = async (payload: IForgotPasswordPayload) => {
-  const email = payload.email.trim().toLowerCase();
+  const email = normalizedEmail(payload.email);
+  const user = await prisma.user.findUnique({ where: { email } });
 
-  const isUserExist = await prisma.user.findUnique({
-    where: {
-      email,
-    },
-  });
-
-  if (!isUserExist) {
-    throw new Error("User does not exist");
-  }
-
-  if (isUserExist.status === UserStatus.BLOCKED) {
-    throw new Error("User is blocked");
-  }
-
-  if (!isUserExist.isEmailVerified) {
-    throw new Error("User email is not verified");
-  }
-
-  // Pure Google account has no password to reset
-  if (!isUserExist.password) {
-    throw new Error(
-      "This account uses Google login. Please continue with Google.",
+  if (!user || !user.password) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "Password reset is not available for this account",
     );
   }
 
-  const otp = crypto.randomInt(100000, 1000000).toString();
+  if (user.status === UserStatus.BLOCKED) {
+    throw new AppError(httpStatus.FORBIDDEN, "Your account is blocked");
+  }
 
-  const key = `forgot-password-otp:${email}`;
-
-  const expirationSeconds = 5 * 60;
-
-  await redisClient.set(key, otp, {
-    expiration: {
-      type: "EX",
-      value: expirationSeconds,
-    },
-  });
-
-  console.log("Forgot password OTP:", otp);
-
-  // Later: send this OTP to the user's email
-  const templatePath = path.join(
-    process.cwd(),
-    "src/app/templates/forgot-password.ejs",
+  await issueOtp(
+    "forgot-password",
+    email,
+    "EventFlow password reset code",
+    (otp) => `<p>Your password reset code is <strong>${otp}</strong>. It expires in 10 minutes.</p>`,
   );
-
-  const templateData = {
-    name: isUserExist.name,
-    otp,
-    expirationMinutes: expirationSeconds / 60,
-    year: new Date().getFullYear(),
-  };
-
-  const html = await ejs.renderFile(templatePath, templateData);
-
-  await transporter.sendMail({
-    from: `"EventFlow" <${config.email_sender}>`,
-    to: isUserExist.email,
-    replyTo: `"EventFlow Support" <${config.email_sender}>`,
-    subject: "Your EventFlow Password Reset Code",
-    html,
-  });
-
-  return {
-    message: "OTP sent successfully",
-  };
 };
 
 const resetPassword = async (payload: IResetPasswordPayload) => {
-  const { email, otp, newPassword } = payload;
+  const email = normalizedEmail(payload.email);
+  const user = await prisma.user.findUnique({ where: { email } });
 
-  const isUserExist = await prisma.user.findUnique({
-    where: {
-      email,
-    },
+  if (!user || !user.password) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Password reset is not available");
+  }
+
+  await verifyOtp("forgot-password", email, payload.otp);
+
+  const password = await bcrypt.hash(
+    payload.newPassword,
+    config.bcrypt_salt_rounds,
+  );
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password,
+        mustChangePassword: false,
+        authProvider:
+          user.authProvider === AuthProvider.GOOGLE
+            ? AuthProvider.BOTH
+            : user.authProvider,
+      },
+    }),
+    prisma.session.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+
+  void safeSendEmail({
+    to: email,
+    subject: "Your EventFlow password was changed",
+    html: "<p>Your EventFlow password was reset successfully. All existing sessions were signed out.</p>",
+  });
+};
+
+const changePassword = async (
+  requestUser: IRequestUser,
+  payload: IChangePasswordPayload,
+) => {
+  const user = await prisma.user.findUnique({
+    where: { id: requestUser.userId },
   });
 
-  if (!isUserExist) {
-    throw new Error("User does not exist");
-  }
-
-  if (isUserExist.status === UserStatus.BLOCKED) {
-    throw new Error("User is blocked");
-  }
-
-  if (!isUserExist.isEmailVerified) {
-    throw new Error("User email is not verified");
-  }
-
-  // Pure Google account has no password to reset
-  if (!isUserExist.password) {
-    throw new Error(
-      "This account uses Google login. Please continue with Google.",
+  if (!user?.password) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "This account does not have a password yet",
     );
   }
 
-  const key = `forgot-password-otp:${email}`;
-  const redisOtp = await redisClient.get(key);
-
-  if (!redisOtp) {
-    throw new Error("Invalid OTP");
+  if (!(await bcrypt.compare(payload.currentPassword, user.password))) {
+    throw new AppError(httpStatus.BAD_REQUEST, "Current password is incorrect");
   }
 
-  if (redisOtp !== otp) {
-    throw new Error("OTP Does Not Match");
-  }
-
-  const hashedNewPassword = await bcrypt.hash(
-    newPassword,
-    Number(config.bcrypt_salt_rounds),
+  const password = await bcrypt.hash(
+    payload.newPassword,
+    config.bcrypt_salt_rounds,
   );
 
-  await prisma.user.update({
-    where: {
-      email: isUserExist.email,
-    },
-    data: {
-      password: hashedNewPassword,
-    },
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password,
+        mustChangePassword: false,
+      },
+    }),
+    prisma.session.updateMany({
+      where: {
+        userId: user.id,
+        revokedAt: null,
+        ...(requestUser.sessionId
+          ? { id: { not: requestUser.sessionId } }
+          : {}),
+      },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+};
+
+const setPassword = async (
+  requestUser: IRequestUser,
+  payload: ISetPasswordPayload,
+) => {
+  const user = await prisma.user.findUnique({
+    where: { id: requestUser.userId },
   });
 
-  await redisClient.del([key]);
-  const templatePath = path.join(
-    process.cwd(),
-    "src/app/templates/reset-password.ejs",
-  );
+  if (!user || user.role !== UserRole.ATTENDEE || !user.googleId) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "Set password is available only to Google attendees",
+    );
+  }
 
-  const templateData = {
-    name: isUserExist.name,
-    email: isUserExist.email,
-    year: new Date().getFullYear(),
-  };
+  if (user.password) {
+    throw new AppError(httpStatus.CONFLICT, "This account already has a password");
+  }
 
-  const html = await ejs.renderFile(templatePath, templateData);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      password: await bcrypt.hash(
+        payload.newPassword,
+        config.bcrypt_salt_rounds,
+      ),
+      authProvider: AuthProvider.BOTH,
+    },
+  });
+};
 
-  await transporter.sendMail({
-    from: `"EventFlow" <${config.email_sender}>`,
-    to: isUserExist.email,
-    replyTo: `"EventFlow Support" <${config.email_sender}>`,
-    subject: "Your EventFlow Password Has Been Changed",
-    html,
+const logout = async (requestUser: IRequestUser) => {
+  if (!requestUser.sessionId) return;
+
+  await prisma.session.updateMany({
+    where: {
+      id: requestUser.sessionId,
+      userId: requestUser.userId,
+      revokedAt: null,
+    },
+    data: { revokedAt: new Date() },
+  });
+};
+
+const logoutAll = async (requestUser: IRequestUser) => {
+  await prisma.session.updateMany({
+    where: { userId: requestUser.userId, revokedAt: null },
+    data: { revokedAt: new Date() },
   });
 };
 
 export const AuthService = {
   registerAttendee,
+  resendAttendeeOtp,
   verifyAttendeeEmail,
   loginUser,
   getMe,
@@ -850,8 +670,8 @@ export const AuthService = {
   googleLogin,
   forgotPassword,
   resetPassword,
+  changePassword,
+  setPassword,
+  logout,
+  logoutAll,
 };
-
-export interface IGoogleLoginPayload {
-  idToken: string;
-}
