@@ -5,11 +5,16 @@ model EventStaff {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   invitedByOrganizerId String
+  invitedByOrganizer   Organizer @relation(fields: [invitedByOrganizerId], references: [id], onDelete: Cascade)
 
-  invitationStatus StaffInvitationStatus @default(PENDING)
-
+  invitationStatus    StaffInvitationStatus @default(PENDING)
   invitationExpiresAt DateTime?
+  acceptedAt          DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  assignments EventStaffAssignment[]
+
+  @@index([invitedByOrganizerId, invitationStatus])
 }

@@ -4,8 +4,9 @@ model User {
   email    String @unique
   password String?
 
-  role   UserRole
-  status UserStatus @default(ACTIVE)
+  role         UserRole
+  status       UserStatus   @default(ACTIVE)
+  authProvider AuthProvider @default(CREDENTIALS)
 
   isEmailVerified    Boolean @default(false)
   googleId           String? @unique
@@ -18,7 +19,25 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  attendee   Attendee?
-  organizer  Organizer?
-  eventStaff EventStaff?
+  attendee      Attendee?
+  organizer     Organizer?
+  eventStaff    EventStaff?
+  sessions      Session[]
+  notifications Notification[]
+}
+
+model Session {
+  id               String   @id @default(cuid())
+  userId           String
+  refreshTokenHash String   @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
 }

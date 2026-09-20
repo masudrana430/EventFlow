@@ -1,0 +1,218 @@
+model TicketType {
+  id String @id @default(cuid())
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  price       Decimal @db.Decimal(12, 2)
+
+  quantity         Int
+  soldQuantity     Int @default(0)
+  reservedQuantity Int @default(0)
+  maxPerOrder      Int @default(10)
+
+  saleStartAt DateTime
+  saleEndAt   DateTime
+
+  transferable Boolean @default(true)
+  refundable   Boolean @default(true)
+  benefits     String[] @default([])
+  isVisible    Boolean @default(true)
+  isDeleted    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations TicketReservation[]
+  orderItems    OrderItem[]
+  tickets       Ticket[]
+  waitlist      WaitlistEntry[]
+
+  @@unique([eventId, name])
+  @@index([eventId, isVisible, isDeleted])
+}
+
+model TicketReservation {
+  id String @id @default(cuid())
+
+  attendeeId String
+  attendee   Attendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+
+  quantity  Int
+  status    ReservationStatus @default(ACTIVE)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order Order?
+
+  @@index([status, expiresAt])
+  @@index([ticketTypeId, status])
+}
+
+model Order {
+  id          String @id @default(cuid())
+  orderNumber String @unique
+
+  attendeeId String
+  attendee   Attendee @relation(fields: [attendeeId], references: [id])
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id])
+
+  reservationId String @unique
+  reservation   TicketReservation @relation(fields: [reservationId], references: [id])
+
+  promoCodeId String?
+  promoCode   PromoCode? @relation(fields: [promoCodeId], references: [id])
+
+  status OrderStatus @default(PENDING)
+
+  subtotal   Decimal @db.Decimal(12, 2)
+  serviceFee Decimal @db.Decimal(12, 2)
+  tax        Decimal @default(0) @db.Decimal(12, 2)
+  discount   Decimal @default(0) @db.Decimal(12, 2)
+  total      Decimal @db.Decimal(12, 2)
+  currency   String  @default("BDT")
+
+  expiresAt   DateTime
+  paidAt      DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items            OrderItem[]
+  payment          Payment?
+  tickets          Ticket[]
+  refunds          Refund[]
+  disputes         Dispute[]
+  promoRedemptions PromoCodeRedemption[]
+
+  @@index([attendeeId, status])
+  @@index([eventId, status])
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+
+  ticketTypeName String
+  unitPrice      Decimal @db.Decimal(12, 2)
+  quantity       Int
+  lineTotal      Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  orderId String @unique
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  gateway       String @default("UDDOKTAPAY")
+  invoiceId     String @unique
+  transactionId String? @unique
+
+  status   PaymentStatus @default(PENDING)
+  amount   Decimal @db.Decimal(12, 2)
+  currency String  @default("BDT")
+
+  paymentMethod String?
+  payerEmail    String?
+
+  gatewayResponse Json?
+  verifiedAt     DateTime?
+  paidAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Ticket {
+  id           String @id @default(cuid())
+  ticketNumber String @unique
+
+  orderId String
+  order   Order @relation(fields: [orderId], references: [id])
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id])
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id])
+
+  ownerId String
+  owner   Attendee @relation(fields: [ownerId], references: [id])
+
+  qrTokenHash String @unique
+  qrPayload   String
+
+  status TicketStatus @default(VALID)
+
+  checkedInAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checkIn   CheckIn?
+  transfers TicketTransfer[]
+  refunds   Refund[]
+  disputes  Dispute[]
+
+  @@index([eventId, status])
+  @@index([ownerId, status])
+}
+
+model CheckIn {
+  id String @id @default(cuid())
+
+  ticketId String @unique
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id])
+
+  scannedByUserId String
+
+  method     CheckInMethod
+  deviceInfo String?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventId, createdAt])
+}
+
+model EventStaffAssignment {
+  id String @id @default(cuid())
+
+  eventStaffId String
+  eventStaff   EventStaff @relation(fields: [eventStaffId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  assignedByOrganizerId String
+  isActive              Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventStaffId, eventId])
+  @@index([eventId, isActive])
+}
