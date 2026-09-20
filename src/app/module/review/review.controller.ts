@@ -14,7 +14,7 @@ const create = catchAsync(async (req, res) => {
 });
 
 const eventReviews = catchAsync(async (req, res) => {
-  const result = await ReviewService.eventReviews(req.params.eventId);
+  const result = await ReviewService.eventReviews(String(req.params.eventId));
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -25,7 +25,7 @@ const eventReviews = catchAsync(async (req, res) => {
 
 const moderate = catchAsync(async (req, res) => {
   const result = await ReviewService.moderate(
-    req.params.reviewId,
+    String(req.params.reviewId),
     req.body.status,
   );
   sendResponse(res, {

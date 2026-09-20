@@ -39,7 +39,7 @@ const all = catchAsync(async (_req, res) => {
 const decide = catchAsync(async (req, res) => {
   const result = await RefundService.decide(
     { userId: req.user!.userId, role: req.user!.role },
-    req.params.refundId,
+    String(req.params.refundId),
     req.body.decision,
     req.body.approvedAmount,
     req.body.reason,
@@ -55,7 +55,7 @@ const decide = catchAsync(async (req, res) => {
 const markRefunded = catchAsync(async (req, res) => {
   const result = await RefundService.markRefunded(
     req.user!.userId,
-    req.params.refundId,
+    String(req.params.refundId),
     req.body.gatewayRefundId,
   );
   sendResponse(res, {

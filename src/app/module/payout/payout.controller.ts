@@ -6,7 +6,7 @@ import { PayoutService } from "./payout.service";
 const request = catchAsync(async (req, res) => {
   const result = await PayoutService.request(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
   );
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -39,7 +39,7 @@ const all = catchAsync(async (_req, res) => {
 const decide = catchAsync(async (req, res) => {
   const result = await PayoutService.decide(
     req.user!.userId,
-    req.params.payoutId,
+    String(req.params.payoutId),
     req.body,
   );
   sendResponse(res, {

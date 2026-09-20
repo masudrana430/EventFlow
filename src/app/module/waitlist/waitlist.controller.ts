@@ -19,7 +19,7 @@ const join = catchAsync(async (req, res) => {
 const leave = catchAsync(async (req, res) => {
   const result = await WaitlistService.leave(
     req.user!.userId,
-    req.params.ticketTypeId,
+    String(req.params.ticketTypeId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,

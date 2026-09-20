@@ -16,7 +16,7 @@ const myTickets = catchAsync(async (req, res) => {
 const getMyTicket = catchAsync(async (req, res) => {
   const result = await TicketService.getMyTicket(
     req.user!.userId,
-    req.params.ticketId,
+    String(req.params.ticketId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -29,13 +29,13 @@ const getMyTicket = catchAsync(async (req, res) => {
 const downloadPdf = catchAsync(async (req, res) => {
   const buffer = await TicketService.generatePdf(
     req.user!.userId,
-    req.params.ticketId,
+    String(req.params.ticketId),
   );
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="eventflow-ticket-${req.params.ticketId}.pdf"`,
+    `attachment; filename="eventflow-ticket-${String(req.params.ticketId)}.pdf"`,
   );
   res.status(httpStatus.OK).send(buffer);
 });
@@ -60,7 +60,7 @@ const manualSearch = catchAsync(async (req, res) => {
   const result = await TicketService.manualSearch(
     req.user!.userId,
     req.user!.role,
-    req.params.eventId,
+    String(req.params.eventId),
     String(req.query.search ?? ""),
   );
   sendResponse(res, {

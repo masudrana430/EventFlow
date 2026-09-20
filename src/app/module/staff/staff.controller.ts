@@ -36,7 +36,7 @@ const list = catchAsync(async (req, res) => {
 const assign = catchAsync(async (req, res) => {
   const result = await StaffService.assign(
     req.user!.userId,
-    req.params.staffId,
+    String(req.params.staffId),
     req.body.eventIds,
   );
   sendResponse(res, {
@@ -50,7 +50,7 @@ const assign = catchAsync(async (req, res) => {
 const revoke = catchAsync(async (req, res) => {
   const result = await StaffService.revoke(
     req.user!.userId,
-    req.params.staffId,
+    String(req.params.staffId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,

@@ -14,7 +14,7 @@ const create = catchAsync(async (req, res) => {
 });
 
 const list = catchAsync(async (req, res) => {
-  const result = await PromoService.list(req.user!.userId, req.params.eventId);
+  const result = await PromoService.list(req.user!.userId, String(req.params.eventId));
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
@@ -26,7 +26,7 @@ const list = catchAsync(async (req, res) => {
 const update = catchAsync(async (req, res) => {
   const result = await PromoService.update(
     req.user!.userId,
-    req.params.promoId,
+    String(req.params.promoId),
     req.body,
   );
   sendResponse(res, {

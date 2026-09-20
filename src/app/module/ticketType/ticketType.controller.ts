@@ -6,7 +6,7 @@ import { TicketTypeService } from "./ticketType.service";
 const create = catchAsync(async (req, res) => {
   const result = await TicketTypeService.create(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     req.body,
   );
   sendResponse(res, {
@@ -20,7 +20,7 @@ const create = catchAsync(async (req, res) => {
 const update = catchAsync(async (req, res) => {
   const result = await TicketTypeService.update(
     req.user!.userId,
-    req.params.ticketTypeId,
+    String(req.params.ticketTypeId),
     req.body,
   );
   sendResponse(res, {
@@ -34,7 +34,7 @@ const update = catchAsync(async (req, res) => {
 const remove = catchAsync(async (req, res) => {
   const result = await TicketTypeService.remove(
     req.user!.userId,
-    req.params.ticketTypeId,
+    String(req.params.ticketTypeId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -45,7 +45,7 @@ const remove = catchAsync(async (req, res) => {
 });
 
 const listPublic = catchAsync(async (req, res) => {
-  const result = await TicketTypeService.listPublic(req.params.eventId);
+  const result = await TicketTypeService.listPublic(String(req.params.eventId));
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
