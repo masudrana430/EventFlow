@@ -1,12 +1,15 @@
-name: Generate Migration Preview
+name: Generate EventFlow Migration
 
 on:
   push:
     branches:
       - feature/complete-eventflow-backend
 
+permissions:
+  contents: write
+
 jobs:
-  migration-preview:
+  generate-migration:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -32,6 +35,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feature/complete-eventflow-backend
 
       - uses: actions/setup-node@v4
         with:
@@ -39,17 +44,28 @@ jobs:
 
       - run: npm install
 
-      - name: Generate differential migration SQL
+      - name: Generate migration if missing
+        shell: bash
         run: |
-          mkdir -p migration-preview
-          npx prisma migrate diff \
-            --from-migrations prisma/migrations \
-            --to-schema prisma/schema \
-            --script \
-            --output migration-preview/migration.sql
+          set -euo pipefail
+          TARGET="prisma/migrations/20260920_complete_eventflow_backend/migration.sql"
 
-      - name: Upload migration SQL
-        uses: actions/upload-artifact@v4
-        with:
-          name: eventflow-migration-preview
-          path: migration-preview/migration.sql
+          if [ -f "$TARGET" ]; then
+            echo "Migration already exists; nothing to generate."
+            exit 0
+          fi
+
+          mkdir -p "$(dirname "$TARGET")"
+
+          npx prisma migrate diff             --from-migrations prisma/migrations             --to-schema prisma/schema             --script             --output "$TARGET"
+
+          if [ ! -s "$TARGET" ]; then
+            echo "Generated migration was empty."
+            exit 1
+          fi
+
+          git config user.name "EventFlow CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$TARGET"
+          git commit -m "chore: add complete EventFlow database migration"
+          git push origin HEAD:feature/complete-eventflow-backend
