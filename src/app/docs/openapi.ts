@@ -1,34 +1,183 @@
+type HttpMethod = "get" | "post" | "patch" | "put" | "delete";
+
+const routeRows = `
+post|/api/v1/auth/register|Auth|Register attendee and send OTP|
+post|/api/v1/auth/resend-verification-otp|Auth|Resend attendee verification OTP|
+post|/api/v1/auth/verify-email|Auth|Verify attendee email|
+post|/api/v1/auth/login|Auth|Credential login|
+get|/api/v1/auth/me|Auth|Get current user|auth
+post|/api/v1/auth/refresh-token|Auth|Rotate refresh session|
+post|/api/v1/auth/google|Auth|Google login for attendees|
+post|/api/v1/auth/forgot-password|Auth|Send password reset OTP|
+post|/api/v1/auth/reset-password|Auth|Reset password using OTP|
+post|/api/v1/auth/change-password|Auth|Change password|auth
+post|/api/v1/auth/set-password|Auth|Set password for Google attendee|auth
+post|/api/v1/auth/logout|Auth|Logout current session|auth
+post|/api/v1/auth/logout-all|Auth|Revoke all sessions|auth
+patch|/api/v1/user/profile|User|Update own profile|auth
+patch|/api/v1/user/profile-image|User|Upload profile image|auth,multipart
+post|/api/v1/organizer/apply|Organizer|Apply as organizer|multipart
+post|/api/v1/organizer/verify-email|Organizer|Verify organizer application email|
+get|/api/v1/organizer/applications|Organizer|Admin list organizer applications|auth
+patch|/api/v1/organizer/applications/{organizerId}/decision|Organizer|Approve or reject organizer|auth
+get|/api/v1/organizer/me|Organizer|Get organizer profile|auth
+patch|/api/v1/organizer/me|Organizer|Update organizer profile|auth
+post|/api/v1/admin/accounts|Admin|Create administrative account|auth
+get|/api/v1/admin/users|Admin|List users|auth
+patch|/api/v1/admin/users/{userId}/status|Admin|Block or unblock user|auth
+get|/api/v1/admin/audit-logs|Admin|View audit logs|auth
+get|/api/v1/admin/settings|Admin|List platform settings|auth
+put|/api/v1/admin/settings/{key}|Admin|Upsert platform setting|auth
+get|/api/v1/categories/public|Category|List active categories|
+get|/api/v1/categories|Category|Admin list categories|auth
+post|/api/v1/categories|Category|Create category|auth
+patch|/api/v1/categories/{categoryId}|Category|Update category|auth
+delete|/api/v1/categories/{categoryId}|Category|Delete or disable category|auth
+get|/api/v1/events/public|Event|Discover published events|
+get|/api/v1/events/public/{eventIdOrSlug}|Event|Get public event details|
+get|/api/v1/events/my-events|Event|Organizer event list|auth
+post|/api/v1/events|Event|Create draft event|auth
+patch|/api/v1/events/{eventId}|Event|Update owned event|auth
+patch|/api/v1/events/{eventId}/cover|Event|Upload event cover|auth,multipart
+patch|/api/v1/events/{eventId}/gallery|Event|Upload event gallery|auth,multipart
+post|/api/v1/events/{eventId}/submit|Event|Submit event for review|auth
+post|/api/v1/events/{eventId}/publish|Event|Publish approved event|auth
+post|/api/v1/events/{eventId}/cancel|Event|Cancel event|auth
+get|/api/v1/events/admin/all|Event|Admin list all events|auth
+post|/api/v1/events/admin/{eventId}/review|Event|Review submitted event|auth
+post|/api/v1/events/admin/{eventId}/suspend|Event|Suspend event|auth
+post|/api/v1/events/admin/{eventId}/restore|Event|Restore event|auth
+get|/api/v1/ticket-types/event/{eventId}/public|Ticket Type|List public ticket types|
+post|/api/v1/ticket-types/event/{eventId}|Ticket Type|Create ticket type|auth
+patch|/api/v1/ticket-types/{ticketTypeId}|Ticket Type|Update ticket type|auth
+delete|/api/v1/ticket-types/{ticketTypeId}|Ticket Type|Delete or disable ticket type|auth
+post|/api/v1/staff/accept|Staff|Accept staff invitation|
+get|/api/v1/staff/my-assignments|Staff|Staff assigned events|auth
+get|/api/v1/staff|Staff|Organizer list staff|auth
+post|/api/v1/staff/invite|Staff|Invite event staff|auth
+patch|/api/v1/staff/{staffId}/assign|Staff|Assign staff to events|auth
+delete|/api/v1/staff/{staffId}|Staff|Revoke staff access|auth
+post|/api/v1/promos|Promo|Create promo code|auth
+get|/api/v1/promos/event/{eventId}|Promo|List event promo codes|auth
+patch|/api/v1/promos/{promoId}|Promo|Update promo code|auth
+post|/api/v1/orders/checkout|Order|Reserve inventory and create checkout|auth
+get|/api/v1/orders/my-orders|Order|Attendee order history|auth
+get|/api/v1/orders/my-orders/{orderId}|Order|Attendee order details|auth
+get|/api/v1/payment/uddoktapay/callback|Payment|UddoktaPay browser callback|
+get|/api/v1/payment/uddoktapay/cancel|Payment|UddoktaPay cancel callback|
+post|/api/v1/payment/uddoktapay/webhook|Payment|UddoktaPay webhook with server verification|
+get|/api/v1/payment/my-payments|Payment|Attendee payment history|auth
+get|/api/v1/payment/all|Payment|Admin payment history|auth
+get|/api/v1/tickets/my-tickets|Ticket|Attendee digital tickets|auth
+get|/api/v1/tickets/my-tickets/{ticketId}|Ticket|Get digital ticket|auth
+get|/api/v1/tickets/my-tickets/{ticketId}/pdf|Ticket|Download PDF ticket|auth
+post|/api/v1/tickets/check-in/qr|Ticket|QR check-in|auth
+get|/api/v1/tickets/check-in/event/{eventId}/search|Ticket|Manual ticket search|auth
+post|/api/v1/tickets/check-in/manual|Ticket|Manual ticket check-in|auth
+post|/api/v1/refunds|Refund|Request ticket refund|auth
+get|/api/v1/refunds/organizer|Refund|Organizer refund queue|auth
+get|/api/v1/refunds/all|Refund|Admin refund queue|auth
+patch|/api/v1/refunds/{refundId}/decision|Refund|Approve or reject refund|auth
+patch|/api/v1/refunds/{refundId}/complete|Refund|Record completed gateway refund|auth
+post|/api/v1/transfers|Transfer|Create ticket transfer|auth
+post|/api/v1/transfers/accept|Transfer|Accept ticket transfer|auth
+get|/api/v1/transfers/mine|Transfer|My ticket transfers|auth
+post|/api/v1/waitlist|Waitlist|Join sold-out waitlist|auth
+delete|/api/v1/waitlist/{ticketTypeId}|Waitlist|Leave waitlist|auth
+get|/api/v1/waitlist/mine|Waitlist|My waitlist entries|auth
+get|/api/v1/notifications|Notification|My notifications|auth
+patch|/api/v1/notifications/read-all|Notification|Mark all notifications read|auth
+patch|/api/v1/notifications/{notificationId}/read|Notification|Mark notification read|auth
+post|/api/v1/announcements|Announcement|Send announcement to ticket holders|auth
+get|/api/v1/announcements/event/{eventId}|Announcement|List event announcements|auth
+post|/api/v1/reviews|Review|Review completed event|auth
+get|/api/v1/reviews/event/{eventId}|Review|Public event reviews|
+patch|/api/v1/reviews/{reviewId}/moderate|Review|Moderate review|auth
+post|/api/v1/disputes|Dispute|Open dispute|auth
+get|/api/v1/disputes/mine|Dispute|My disputes|auth
+get|/api/v1/disputes/organizer|Dispute|Organizer dispute queue|auth
+post|/api/v1/disputes/{disputeId}/respond|Dispute|Organizer respond to dispute|auth
+get|/api/v1/disputes/admin/all|Dispute|Admin dispute queue|auth
+patch|/api/v1/disputes/admin/{disputeId}/decision|Dispute|Admin resolve dispute|auth
+post|/api/v1/payouts/event/{eventId}/request|Payout|Request eligible payout|auth
+get|/api/v1/payouts/mine|Payout|Organizer payout history|auth
+get|/api/v1/payouts/all|Payout|Admin payout queue|auth
+patch|/api/v1/payouts/{payoutId}/status|Payout|Update payout status|auth
+get|/api/v1/analytics/attendee|Analytics|Attendee analytics|auth
+get|/api/v1/analytics/organizer|Analytics|Organizer analytics|auth
+get|/api/v1/analytics/staff|Analytics|Staff analytics|auth
+get|/api/v1/analytics/admin|Analytics|Admin analytics|auth
+`.trim();
+
+const rows = routeRows.split("\n").map((row) => {
+  const [method, path, tag, summary, flags = ""] = row.split("|");
+  return {
+    method: method as HttpMethod,
+    path,
+    tag,
+    summary,
+    auth: flags.includes("auth"),
+    multipart: flags.includes("multipart"),
+  };
+});
+
+const paths: Record<string, Record<string, unknown>> = {};
+
+for (const route of rows) {
+  const parameters = [...route.path.matchAll(/\{([^}]+)\}/g)].map((match) => ({
+    name: match[1],
+    in: "path",
+    required: true,
+    schema: { type: "string" },
+  }));
+
+  paths[route.path] ??= {};
+  paths[route.path][route.method] = {
+    tags: [route.tag],
+    summary: route.summary,
+    ...(route.auth ? { security: [{ bearerAuth: [] }] } : {}),
+    ...(parameters.length ? { parameters } : {}),
+    ...(["post", "patch", "put"].includes(route.method)
+      ? {
+          requestBody: {
+            required: true,
+            content: route.multipart
+              ? {
+                  "multipart/form-data": {
+                    schema: { type: "object", additionalProperties: true },
+                  },
+                }
+              : {
+                  "application/json": {
+                    schema: { type: "object", additionalProperties: true },
+                  },
+                },
+          },
+        }
+      : {}),
+    responses: {
+      "200": { description: "Success" },
+      "201": { description: "Created" },
+      "400": { description: "Bad request" },
+      "401": { description: "Unauthorized" },
+      "403": { description: "Forbidden" },
+      "404": { description: "Not found" },
+      "409": { description: "Conflict" },
+    },
+  };
+}
+
 export const openApiSpec = {
   openapi: "3.0.3",
   info: {
     title: "EventFlow API",
-    version: "1.0.0",
+    version: "2.0.0",
     description:
-      "OpenAPI documentation for the EventFlow backend. The current API covers attendee authentication, Google login, password recovery, authenticated profile access, and profile-image upload. Extend this specification as new EventFlow modules are added.",
+      "EventFlow backend: authentication, organizer approval, event moderation, inventory-safe ticketing, UddoktaPay verification, digital tickets, check-in, refunds, transfers, waitlists, staff, disputes, payouts, notifications and analytics.",
   },
   servers: [
-    {
-      url: "/",
-      description: "Current host",
-    },
-    {
-      url: "http://localhost:5000",
-      description: "Local development",
-    },
-  ],
-  tags: [
-    {
-      name: "System",
-      description: "Service health endpoints",
-    },
-    {
-      name: "Auth",
-      description: "Authentication and attendee account endpoints",
-    },
-    {
-      name: "User",
-      description: "Authenticated user profile endpoints",
-    },
+    { url: "/", description: "Current host" },
+    { url: "http://localhost:5000", description: "Local development" },
   ],
   components: {
     securitySchemes: {
@@ -36,537 +185,9 @@ export const openApiSpec = {
         type: "http",
         scheme: "bearer",
         bearerFormat: "JWT",
-        description:
-          "Pass the access token returned by login or email verification.",
-      },
-      accessTokenCookie: {
-        type: "apiKey",
-        in: "cookie",
-        name: "accessToken",
-        description: "HTTP-only access-token cookie set by EventFlow.",
-      },
-    },
-    schemas: {
-      ErrorResponse: {
-        type: "object",
-        properties: {
-          success: { type: "boolean", example: false },
-          statusCode: { type: "integer", example: 400 },
-          name: { type: "string", example: "Bad Request" },
-          message: { type: "string", example: "Validation failed" },
-        },
-      },
-      AttendeeRegistrationRequest: {
-        type: "object",
-        required: ["name", "email", "password"],
-        properties: {
-          name: {
-            type: "string",
-            minLength: 3,
-            maxLength: 100,
-            example: "Masud Rana",
-          },
-          email: {
-            type: "string",
-            format: "email",
-            example: "attendee@example.com",
-          },
-          password: {
-            type: "string",
-            format: "password",
-            minLength: 8,
-            example: "Attendee@123",
-            description:
-              "Must contain uppercase, lowercase, number, and special character.",
-          },
-          attendee: {
-            type: "object",
-            properties: {
-              phone: { type: "string", example: "01700000000" },
-              location: { type: "string", example: "Chattogram" },
-            },
-          },
-        },
-      },
-      VerifyEmailRequest: {
-        type: "object",
-        required: ["email", "otp"],
-        properties: {
-          email: {
-            type: "string",
-            format: "email",
-            example: "attendee@example.com",
-          },
-          otp: {
-            type: "string",
-            pattern: "^[0-9]{6}$",
-            example: "123456",
-          },
-        },
-      },
-      LoginRequest: {
-        type: "object",
-        required: ["email", "password"],
-        properties: {
-          email: {
-            type: "string",
-            format: "email",
-            example: "attendee@example.com",
-          },
-          password: {
-            type: "string",
-            format: "password",
-            example: "Attendee@123",
-          },
-        },
-      },
-      GoogleLoginRequest: {
-        type: "object",
-        required: ["idToken"],
-        properties: {
-          idToken: {
-            type: "string",
-            description: "Google ID token issued for the configured Google client ID.",
-            example: "eyJhbGciOiJSUzI1NiIs...",
-          },
-        },
-      },
-      ForgotPasswordRequest: {
-        type: "object",
-        required: ["email"],
-        properties: {
-          email: {
-            type: "string",
-            format: "email",
-            example: "attendee@example.com",
-          },
-        },
-      },
-      ResetPasswordRequest: {
-        type: "object",
-        required: ["email", "newPassword", "otp"],
-        properties: {
-          email: {
-            type: "string",
-            format: "email",
-            example: "attendee@example.com",
-          },
-          newPassword: {
-            type: "string",
-            format: "password",
-            minLength: 8,
-            example: "NewPassword@123",
-          },
-          otp: {
-            type: "string",
-            example: "123456",
-            minLength: 6,
-            maxLength: 6,
-          },
-        },
-      },
-      User: {
-        type: "object",
-        properties: {
-          id: { type: "string", example: "cm123example" },
-          name: { type: "string", example: "Masud Rana" },
-          email: {
-            type: "string",
-            format: "email",
-            example: "attendee@example.com",
-          },
-          role: {
-            type: "string",
-            enum: [
-              "SUPER_ADMIN",
-              "ADMIN",
-              "ORGANIZER",
-              "EVENT_STAFF",
-              "ATTENDEE",
-            ],
-            example: "ATTENDEE",
-          },
-          status: {
-            type: "string",
-            enum: ["ACTIVE", "BLOCKED"],
-            example: "ACTIVE",
-          },
-          isEmailVerified: { type: "boolean", example: true },
-          mustChangePassword: { type: "boolean", example: false },
-          imageUrl: { type: "string", example: "https://res.cloudinary.com/..." },
-          imagePublicId: { type: "string", example: "eventflow/profile/example" },
-        },
-      },
-      Attendee: {
-        type: "object",
-        properties: {
-          id: { type: "string", example: "cm123attendee" },
-          userId: { type: "string", example: "cm123example" },
-          phone: { type: "string", nullable: true, example: "01700000000" },
-          profileImage: { type: "string", nullable: true },
-          location: { type: "string", nullable: true, example: "Chattogram" },
-        },
-      },
-      AuthData: {
-        type: "object",
-        properties: {
-          accessToken: { type: "string" },
-          refreshToken: { type: "string" },
-          user: { $ref: "#/components/schemas/User" },
-          attendee: { $ref: "#/components/schemas/Attendee" },
-        },
-      },
-      SuccessResponse: {
-        type: "object",
-        properties: {
-          success: { type: "boolean", example: true },
-          statusCode: { type: "integer", example: 200 },
-          message: { type: "string", example: "Operation successful" },
-          data: { nullable: true },
-        },
       },
     },
   },
-  paths: {
-    "/": {
-      get: {
-        tags: ["System"],
-        summary: "Health check",
-        responses: {
-          "200": {
-            description: "EventFlow backend is running",
-            content: {
-              "application/json": {
-                example: {
-                  success: true,
-                  message: "Welcome to EventFlow Backend",
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/register": {
-      post: {
-        tags: ["Auth"],
-        summary: "Register an attendee and send verification OTP",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/AttendeeRegistrationRequest" },
-            },
-          },
-        },
-        responses: {
-          "201": {
-            description: "Verification OTP sent",
-            content: {
-              "application/json": {
-                example: {
-                  success: true,
-                  statusCode: 201,
-                  message: "Verification OTP Sent",
-                  data: null,
-                },
-              },
-            },
-          },
-          "400": {
-            description: "Validation failure",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/verify-email": {
-      post: {
-        tags: ["Auth"],
-        summary: "Verify attendee email and create the attendee account",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/VerifyEmailRequest" },
-            },
-          },
-        },
-        responses: {
-          "201": {
-            description: "Email verified and authentication tokens issued",
-            content: {
-              "application/json": {
-                schema: {
-                  allOf: [
-                    { $ref: "#/components/schemas/SuccessResponse" },
-                    {
-                      type: "object",
-                      properties: {
-                        data: { $ref: "#/components/schemas/AuthData" },
-                      },
-                    },
-                  ],
-                },
-              },
-            },
-          },
-          "400": {
-            description: "Invalid or expired OTP",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/login": {
-      post: {
-        tags: ["Auth"],
-        summary: "Login with email and password",
-        description:
-          "Attendees, approved organizers, accepted event staff, admins, and super admins can use this endpoint according to EventFlow role rules.",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/LoginRequest" },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Login successful; access and refresh cookies are also set",
-            content: {
-              "application/json": {
-                schema: {
-                  allOf: [
-                    { $ref: "#/components/schemas/SuccessResponse" },
-                    {
-                      type: "object",
-                      properties: {
-                        data: { $ref: "#/components/schemas/AuthData" },
-                      },
-                    },
-                  ],
-                },
-              },
-            },
-          },
-          "401": {
-            description: "Invalid credentials or account is not allowed to login",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/me": {
-      get: {
-        tags: ["Auth"],
-        summary: "Get the current authenticated user",
-        security: [{ bearerAuth: [] }, { accessTokenCookie: [] }],
-        responses: {
-          "200": {
-            description: "Authenticated user profile",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SuccessResponse" },
-              },
-            },
-          },
-          "401": {
-            description: "Authentication required",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-          "403": {
-            description: "Role is not allowed",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/refresh-token": {
-      post: {
-        tags: ["Auth"],
-        summary: "Refresh access and refresh tokens",
-        description:
-          "Requires the HTTP-only refreshToken cookie. Postman automatically keeps the cookie after login when the cookie jar is enabled.",
-        responses: {
-          "200": {
-            description: "New authentication cookies issued",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SuccessResponse" },
-              },
-            },
-          },
-          "401": {
-            description: "Missing or invalid refresh token",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/google": {
-      post: {
-        tags: ["Auth"],
-        summary: "Login/register an attendee with Google",
-        description: "Google authentication is available only to ATTENDEE accounts.",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/GoogleLoginRequest" },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Google authentication successful",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SuccessResponse" },
-              },
-            },
-          },
-          "400": {
-            description: "Invalid Google token or unsupported account role",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/forgot-password": {
-      post: {
-        tags: ["Auth"],
-        summary: "Request a password-reset OTP",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/ForgotPasswordRequest" },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Reset OTP sent",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SuccessResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/auth/reset-password": {
-      post: {
-        tags: ["Auth"],
-        summary: "Reset password using an OTP",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/ResetPasswordRequest" },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Password reset successful",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SuccessResponse" },
-              },
-            },
-          },
-          "400": {
-            description: "Invalid OTP or password validation failure",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/v1/user/profile-image": {
-      patch: {
-        tags: ["User"],
-        summary: "Upload or replace the current user's profile image",
-        security: [{ bearerAuth: [] }, { accessTokenCookie: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            "multipart/form-data": {
-              schema: {
-                type: "object",
-                required: ["profileImage"],
-                properties: {
-                  profileImage: {
-                    type: "string",
-                    format: "binary",
-                  },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          "200": {
-            description: "Profile image uploaded successfully",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/SuccessResponse" },
-              },
-            },
-          },
-          "400": {
-            description: "No file uploaded or upload failed",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-          "401": {
-            description: "Authentication required",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/ErrorResponse" },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-} as const;
+  tags: [...new Set(rows.map((route) => route.tag))].map((name) => ({ name })),
+  paths,
+};
