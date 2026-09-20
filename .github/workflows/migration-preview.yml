@@ -49,20 +49,22 @@ jobs:
         run: |
           set -euo pipefail
           TARGET="prisma/migrations/20260920_complete_eventflow_backend/migration.sql"
+          TEMP_SQL="/tmp/eventflow-migration.sql"
 
           if [ -f "$TARGET" ]; then
             echo "Migration already exists; nothing to generate."
             exit 0
           fi
 
-          mkdir -p "$(dirname "$TARGET")"
+          npx prisma migrate diff             --from-migrations prisma/migrations             --to-schema prisma/schema             --script             --output "$TEMP_SQL"
 
-          npx prisma migrate diff             --from-migrations prisma/migrations             --to-schema prisma/schema             --script             --output "$TARGET"
-
-          if [ ! -s "$TARGET" ]; then
+          if [ ! -s "$TEMP_SQL" ]; then
             echo "Generated migration was empty."
             exit 1
           fi
+
+          mkdir -p "$(dirname "$TARGET")"
+          cp "$TEMP_SQL" "$TARGET"
 
           git config user.name "EventFlow CI"
           git config user.email "actions@users.noreply.github.com"
