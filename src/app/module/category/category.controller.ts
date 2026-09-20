@@ -35,7 +35,7 @@ const listAll = catchAsync(async (_req, res) => {
 
 const update = catchAsync(async (req, res) => {
   const result = await CategoryService.update(
-    req.params.categoryId,
+    String(req.params.categoryId),
     req.body,
     req.user!.userId,
   );
@@ -49,7 +49,7 @@ const update = catchAsync(async (req, res) => {
 
 const remove = catchAsync(async (req, res) => {
   const result = await CategoryService.remove(
-    req.params.categoryId,
+    String(req.params.categoryId),
     req.user!.userId,
   );
   sendResponse(res, {

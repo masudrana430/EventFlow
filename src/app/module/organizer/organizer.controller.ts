@@ -66,7 +66,7 @@ const listApplications = catchAsync(async (req, res) => {
 
 const decide = catchAsync(async (req, res) => {
   const result = await OrganizerService.decideApplication(
-    req.params.organizerId,
+    String(req.params.organizerId),
     req.body.status,
     req.body.rejectionReason,
     req.user!.userId,

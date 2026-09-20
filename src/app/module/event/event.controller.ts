@@ -16,7 +16,7 @@ const create = catchAsync(async (req, res) => {
 const update = catchAsync(async (req, res) => {
   const result = await EventService.update(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     req.body,
   );
   sendResponse(res, {
@@ -30,7 +30,7 @@ const update = catchAsync(async (req, res) => {
 const uploadCover = catchAsync(async (req, res) => {
   const result = await EventService.uploadCover(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     req.file!,
   );
   sendResponse(res, {
@@ -44,7 +44,7 @@ const uploadCover = catchAsync(async (req, res) => {
 const uploadGallery = catchAsync(async (req, res) => {
   const result = await EventService.uploadGallery(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     (req.files as Express.Multer.File[]) ?? [],
   );
   sendResponse(res, {
@@ -58,7 +58,7 @@ const uploadGallery = catchAsync(async (req, res) => {
 const submitForReview = catchAsync(async (req, res) => {
   const result = await EventService.submitForReview(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -71,7 +71,7 @@ const submitForReview = catchAsync(async (req, res) => {
 const review = catchAsync(async (req, res) => {
   const result = await EventService.review(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     req.body.decision,
     req.body.reason,
   );
@@ -86,7 +86,7 @@ const review = catchAsync(async (req, res) => {
 const publish = catchAsync(async (req, res) => {
   const result = await EventService.publish(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -99,7 +99,7 @@ const publish = catchAsync(async (req, res) => {
 const cancel = catchAsync(async (req, res) => {
   const result = await EventService.cancel(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     req.body.reason,
     req.user!.role,
   );
@@ -114,7 +114,7 @@ const cancel = catchAsync(async (req, res) => {
 const suspend = catchAsync(async (req, res) => {
   const result = await EventService.suspend(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
     req.body.reason,
   );
   sendResponse(res, {
@@ -128,7 +128,7 @@ const suspend = catchAsync(async (req, res) => {
 const restore = catchAsync(async (req, res) => {
   const result = await EventService.restore(
     req.user!.userId,
-    req.params.eventId,
+    String(req.params.eventId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -171,7 +171,7 @@ const publicList = catchAsync(async (req, res) => {
 });
 
 const publicDetails = catchAsync(async (req, res) => {
-  const result = await EventService.publicDetails(req.params.eventIdOrSlug);
+  const result = await EventService.publicDetails(String(req.params.eventIdOrSlug));
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

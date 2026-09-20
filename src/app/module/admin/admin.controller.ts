@@ -32,7 +32,7 @@ const listUsers = catchAsync(async (req, res) => {
 const updateUserStatus = catchAsync(async (req, res) => {
   const result = await AdminService.updateUserStatus(
     { userId: req.user!.userId, role: req.user!.role as UserRole },
-    req.params.userId,
+    String(req.params.userId),
     req.body.status as UserStatus,
   );
 
@@ -68,7 +68,7 @@ const listSettings = catchAsync(async (_req, res) => {
 const upsertSetting = catchAsync(async (req, res) => {
   const result = await AdminService.upsertSetting(
     req.user!.userId,
-    req.params.key,
+    String(req.params.key),
     req.body.value,
     req.body.description,
   );

@@ -14,7 +14,7 @@ const send = catchAsync(async (req, res) => {
 });
 
 const listForEvent = catchAsync(async (req, res) => {
-  const result = await AnnouncementService.listForEvent(req.params.eventId);
+  const result = await AnnouncementService.listForEvent(String(req.params.eventId));
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

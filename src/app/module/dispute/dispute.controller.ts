@@ -36,7 +36,7 @@ const organizerList = catchAsync(async (req, res) => {
 const organizerRespond = catchAsync(async (req, res) => {
   const result = await DisputeService.organizerRespond(
     req.user!.userId,
-    req.params.disputeId,
+    String(req.params.disputeId),
     req.body.response,
   );
   sendResponse(res, {
@@ -60,7 +60,7 @@ const adminList = catchAsync(async (_req, res) => {
 const decide = catchAsync(async (req, res) => {
   const result = await DisputeService.decide(
     req.user!.userId,
-    req.params.disputeId,
+    String(req.params.disputeId),
     req.body,
   );
   sendResponse(res, {

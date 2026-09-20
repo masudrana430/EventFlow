@@ -16,7 +16,7 @@ const listMine = catchAsync(async (req, res) => {
 const markRead = catchAsync(async (req, res) => {
   const result = await NotificationService.markRead(
     req.user!.userId,
-    req.params.notificationId,
+    String(req.params.notificationId),
   );
   sendResponse(res, {
     statusCode: httpStatus.OK,
