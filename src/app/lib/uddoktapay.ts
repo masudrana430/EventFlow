@@ -1,6 +1,6 @@
+import httpStatus from "http-status";
 import config from "../config";
 import { AppError } from "../utils/AppError";
-import httpStatus from "http-status";
 
 type UddoktaCreatePayload = {
   full_name: string;
@@ -8,6 +8,7 @@ type UddoktaCreatePayload = {
   amount: string;
   metadata: Record<string, string>;
   redirect_url: string;
+  return_type?: "GET" | "POST";
   cancel_url: string;
   webhook_url: string;
 };
@@ -18,9 +19,9 @@ export type UddoktaVerifyResponse = {
   transaction_id?: string;
   payment_method?: string;
   sender_number?: string;
-  amount?: string;
-  fee?: string;
-  charged_amount?: string;
+  amount?: string | number;
+  fee?: string | number;
+  charged_amount?: string | number;
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 };
@@ -49,10 +50,7 @@ const request = async <T>(path: string, body: Record<string, unknown>) => {
   const data = (await response.json().catch(() => ({}))) as T;
 
   if (!response.ok) {
-    throw new AppError(
-      httpStatus.BAD_GATEWAY,
-      "UddoktaPay request failed",
-    );
+    throw new AppError(httpStatus.BAD_GATEWAY, "UddoktaPay request failed");
   }
 
   return data;
@@ -64,7 +62,10 @@ export const createUddoktaPayment = async (payload: UddoktaCreatePayload) => {
     payment_url?: string;
     invoice_id?: string;
     message?: string;
-  }>("/api/checkout-v2", payload);
+  }>("/api/checkout-v2", {
+    ...payload,
+    return_type: payload.return_type ?? "GET",
+  });
 
   if (!result.status || !result.payment_url) {
     throw new AppError(
