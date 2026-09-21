@@ -131,7 +131,7 @@ const issueOtp = async (
     });
   } catch (error) {
     await redisClient
-      .del([\`${prefix}:otp:${email}\`, cooldownKey])
+      .del([`${prefix}:otp:${email}`, cooldownKey])
       .catch(() => undefined);
 
     console.error("OTP email delivery failed:", error);
