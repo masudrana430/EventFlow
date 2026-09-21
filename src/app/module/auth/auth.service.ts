@@ -123,11 +123,24 @@ const issueOtp = async (
   });
   await redisClient.del(`${prefix}:attempts:${email}`);
 
-  await sendEmail({
-    to: email,
-    subject,
-    html: html(otp),
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject,
+      html: html(otp),
+    });
+  } catch (error) {
+    await redisClient
+      .del([\`${prefix}:otp:${email}\`, cooldownKey])
+      .catch(() => undefined);
+
+    console.error("OTP email delivery failed:", error);
+
+    throw new AppError(
+      httpStatus.SERVICE_UNAVAILABLE,
+      "Verification email could not be sent. Please try again",
+    );
+  }
 };
 
 const verifyOtp = async (prefix: string, email: string, otp: string) => {
