@@ -87,7 +87,7 @@ const visit = (items: Array<any> | undefined) => {
     }
 
     const apiPath = raw.replace("{{baseUrl}}", "");
-    postmanRoutes.add(canonical(method, apiPath));
+    postmanRoutes.add(canonical(method, `/api/v1${apiPath}`));
   }
 };
 
