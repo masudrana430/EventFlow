@@ -135,7 +135,7 @@ for (const route of rows) {
   paths[route.path][route.method] = {
     tags: [route.tag],
     summary: route.summary,
-    ...(route.auth ? { security: [{ bearerAuth: [] }] } : {}),
+    ...(route.auth ? { security: [{ bearerAuth: [] }, { cookieAuth: [] }] } : {}),
     ...(parameters.length ? { parameters } : {}),
     ...(["post", "patch", "put"].includes(route.method)
       ? {
@@ -171,12 +171,13 @@ export const openApiSpec = {
   openapi: "3.0.3",
   info: {
     title: "EventFlow API",
-    version: "2.0.0",
+    version: "2.1.0",
     description:
-      "EventFlow backend: authentication, organizer approval, event moderation, inventory-safe ticketing, UddoktaPay verification, digital tickets, check-in, refunds, transfers, waitlists, staff, disputes, payouts, notifications and analytics.",
+      "Complete EventFlow backend API reference covering authentication, organizer approval, event moderation, inventory-safe ticketing, UddoktaPay checkout/verification, digital tickets, check-in, refunds, transfers, waitlists, staff, disputes, payouts, notifications and analytics. Protected endpoints accept either an HTTP-only accessToken cookie or a Bearer JWT.",
   },
   servers: [
     { url: "/", description: "Current host" },
+    { url: "https://eventflow-ln9q.onrender.com", description: "EventFlow production (Render)" },
     { url: "http://localhost:5000", description: "Local development" },
   ],
   components: {
@@ -185,6 +186,13 @@ export const openApiSpec = {
         type: "http",
         scheme: "bearer",
         bearerFormat: "JWT",
+        description: "Paste the access token returned by login/verification.",
+      },
+      cookieAuth: {
+        type: "apiKey",
+        in: "cookie",
+        name: "accessToken",
+        description: "HTTP-only access-token cookie used by browser clients.",
       },
     },
   },
