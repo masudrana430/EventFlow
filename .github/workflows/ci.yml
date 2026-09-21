@@ -127,8 +127,8 @@ jobs:
       SMTP_USER: ci
       SMTP_PASSWORD: ci
       EMAIL_SENDER: eventflow-ci@example.com
-      UDDOKTAPAY_BASE_URL: https://sandbox.uddoktapay.com
-      UDDOKTAPAY_API_KEY: ""
+      UDDOKTAPAY_BASE_URL: http://127.0.0.1:7777
+      UDDOKTAPAY_API_KEY: ci-uddoktapay-key
       RESERVATION_MINUTES: 10
       SERVICE_FEE_PERCENT: 5
       PLATFORM_COMMISSION_PERCENT: 10
@@ -151,6 +151,10 @@ jobs:
 
       - name: Apply migrations
         run: npx prisma migrate deploy
+
+      - name: Start mock UddoktaPay
+        run: |
+          nohup node -e 'const http=require("http"); http.createServer((req,res)=>{let body=""; req.on("data",c=>body+=c); req.on("end",()=>{res.writeHead(200,{"content-type":"application/json"}); if(req.url==="/api/verify-payment"){res.end(JSON.stringify({status:"PENDING",invoice_id:"ci-invoice",amount:"0",metadata:{}}));} else if(req.url==="/api/checkout-v2"){res.end(JSON.stringify({status:true,payment_url:"http://127.0.0.1:7777/pay/ci",invoice_id:"ci-invoice"}));} else {res.end(JSON.stringify({status:false}));}})}).listen(7777);' > /tmp/uddoktapay.log 2>&1 &
 
       - name: Start EventFlow
         run: |
