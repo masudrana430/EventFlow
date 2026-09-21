@@ -29,6 +29,9 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
+      - name: Verify API contract
+        run: npm run verify:api-contract
+
       - name: TypeScript build
         run: npm run build
 
