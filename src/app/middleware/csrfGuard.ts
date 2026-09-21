@@ -5,6 +5,14 @@ import { AppError } from "../utils/AppError";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
+const normalizeOrigin = (value: string) => value.replace(/\/$/, "");
+
+const TRUSTED_ORIGINS = new Set(
+  [config.frontend_url, config.backend_url]
+    .filter(Boolean)
+    .map(normalizeOrigin),
+);
+
 export const csrfGuard = (
   req: Request,
   _res: Response,
@@ -26,7 +34,7 @@ export const csrfGuard = (
 
   const origin = req.get("origin");
 
-  if (!origin || origin !== config.frontend_url) {
+  if (!origin || !TRUSTED_ORIGINS.has(normalizeOrigin(origin))) {
     return next(
       new AppError(
         httpStatus.FORBIDDEN,
