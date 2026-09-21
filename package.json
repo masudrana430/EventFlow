@@ -15,7 +15,8 @@
     "format:fix": "npx @biomejs/biome format --write ./src",
     "lint:check": "npx @biomejs/biome lint ./src",
     "lint:fix": "npx @biomejs/biome lint --write ./src",
-    "verify:api-contract": "tsx scripts/verify-api-contract.ts"
+    "verify:api-contract": "tsx scripts/verify-api-contract.ts",
+    "test:api-routes": "tsx scripts/smoke-all-api-routes.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
