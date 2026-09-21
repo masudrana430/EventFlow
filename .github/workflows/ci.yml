@@ -168,6 +168,9 @@ jobs:
           cat /tmp/eventflow.log
           exit 1
 
+      - name: Smoke every mounted API route
+        run: npm run test:api-routes
+
       - name: Smoke public APIs
         run: |
           curl -fsS http://127.0.0.1:5000/ | grep -q "Welcome to EventFlow Backend"
