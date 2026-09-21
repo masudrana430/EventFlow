@@ -7,7 +7,7 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:5000/api/v1",
+      "value": "https://eventflow-ln9q.onrender.com/api/v1",
       "type": "string"
     },
     {
@@ -179,6 +179,18 @@
       "key": "reviewId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "backendUrl",
+      "value": "https://eventflow-ln9q.onrender.com"
+    },
+    {
+      "key": "targetUserId",
+      "value": ""
+    },
+    {
+      "key": "settingKey",
+      "value": "ticketing"
     }
   ],
   "item": [
@@ -191,14 +203,11 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/../..",
+              "raw": "{{backendUrl}}/",
               "host": [
-                "{{baseUrl}}"
+                "{{backendUrl}}"
               ],
-              "path": [
-                "..",
-                ".."
-              ]
+              "path": []
             }
           }
         },
@@ -207,14 +216,28 @@
           "request": {
             "method": "GET",
             "url": {
-              "raw": "http://localhost:5000/api-docs",
-              "protocol": "http",
+              "raw": "{{backendUrl}}/api-docs",
               "host": [
-                "localhost"
+                "{{backendUrl}}"
               ],
-              "port": "5000",
               "path": [
                 "api-docs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "OpenAPI JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{backendUrl}}/api-docs.json",
+              "host": [
+                "{{backendUrl}}"
+              ],
+              "path": [
+                "api-docs.json"
               ]
             }
           }
@@ -1214,14 +1237,14 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/users/USER_ID/status",
+              "raw": "{{baseUrl}}/admin/users/{{targetUserId}}/status",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "admin",
                 "users",
-                "USER_ID",
+                "{{targetUserId}}",
                 "status"
               ]
             },
@@ -1311,14 +1334,14 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/admin/settings/ticketing",
+              "raw": "{{baseUrl}}/admin/settings/{{settingKey}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "admin",
                 "settings",
-                "ticketing"
+                "{{settingKey}}"
               ]
             },
             "auth": {
@@ -1482,6 +1505,34 @@
                 }
               }
             }
+          }
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "categories",
+                "{{categoryId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Soft-delete/disable a category. Use a disposable category when testing."
           }
         }
       ]
@@ -2100,6 +2151,34 @@
           }
         },
         {
+          "name": "Delete Ticket Type",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ticket-types/{{ticketTypeId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ticket-types",
+                "{{ticketTypeId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{organizerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Soft-delete/disable a ticket type. Prefer a disposable unsold ticket type for testing."
+          }
+        },
+        {
           "name": "Create Promo",
           "request": {
             "method": "POST",
@@ -2637,6 +2716,56 @@
             },
             "description": "Only useful with a real UddoktaPay invoice. The backend performs verify-payment before finalizing."
           }
+        },
+        {
+          "name": "UddoktaPay Callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payment/uddoktapay/callback?invoice_id={{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payment",
+                "uddoktapay",
+                "callback"
+              ],
+              "query": [
+                {
+                  "key": "invoice_id",
+                  "value": "{{invoiceId}}"
+                }
+              ]
+            },
+            "description": "Browser callback. Do not use this to fake payment success; EventFlow verifies the invoice with UddoktaPay server-side."
+          }
+        },
+        {
+          "name": "UddoktaPay Cancel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payment/uddoktapay/cancel?invoice_id={{invoiceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payment",
+                "uddoktapay",
+                "cancel"
+              ],
+              "query": [
+                {
+                  "key": "invoice_id",
+                  "value": "{{invoiceId}}"
+                }
+              ]
+            },
+            "description": "Simulates the browser cancel redirect for an existing invoice."
+          }
         }
       ]
     },
@@ -2938,6 +3067,33 @@
                 {
                   "key": "token",
                   "value": "{{organizerAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Admin Refund Queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/refunds/all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "refunds",
+                "all"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
                   "type": "string"
                 }
               ]
