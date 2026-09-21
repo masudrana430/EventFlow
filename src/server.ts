@@ -1,7 +1,6 @@
 import app from "./app";
 import config from "./app/config";
 import { startBackgroundJobs } from "./app/jobs/scheduler";
-import { transporter } from "./app/lib/nodeMailer";
 import { prisma } from "./app/lib/prisma";
 import { redisClient } from "./app/lib/redis";
 import { seedSuperAdmin, seedTesterAdmin } from "./app/utils/seed";
@@ -21,11 +20,6 @@ const main = async () => {
     .connect()
     .then(() => console.log("Connected to Redis."))
     .catch((error) => console.error("Redis unavailable:", error));
-
-  transporter
-    .verify()
-    .then(() => console.log("Transactional email transport is ready."))
-    .catch((error) => console.error("Email transport unavailable:", error));
 
   startBackgroundJobs();
 
