@@ -38,6 +38,8 @@ const config = {
   cloudinary_api_secret: process.env.CLOUDINARY_API_SECRET ?? "",
 
   email_sender: process.env.EMAIL_SENDER ?? "",
+  resend_api_key:
+    process.env.RESEND_API_KEY ?? process.env.SMTP_PASSWORD ?? "",
   smtp_host: process.env.SMTP_HOST ?? "",
   smtp_port: Number(process.env.SMTP_PORT ?? 465),
   smtp_user: process.env.SMTP_USER ?? "",
