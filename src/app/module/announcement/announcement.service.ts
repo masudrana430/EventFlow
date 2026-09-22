@@ -3,6 +3,7 @@ import { TicketStatus } from "../../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { safeSendEmail } from "../../utils/email";
+import { renderTransactionalEmail } from "../../utils/emailTemplates";
 import { EventService } from "../event/event.service";
 
 const send = async (
@@ -60,7 +61,18 @@ const send = async (
     void safeSendEmail({
       to: owner.user.email,
       subject: `${event.title}: ${payload.title}`,
-      html: `<h2>${payload.title}</h2><p>${payload.message}</p>`,
+      html: await renderTransactionalEmail({
+        name: owner.user.name,
+        heading: payload.title,
+        message: payload.message,
+        preheader: `${event.title}: ${payload.title}`,
+        badge: "Event update",
+        tone: "info",
+        details: [{ label: "Event", value: event.title }],
+        highlightTitle: "Organizer announcement",
+        highlightText:
+          "This message was sent by the event organizer to attendees with valid tickets.",
+      }),
     });
   }
 
