@@ -18,6 +18,7 @@ import {
 } from "../../lib/uddoktapay";
 import { AppError } from "../../utils/AppError";
 import { safeSendEmail } from "../../utils/email";
+import { renderTransactionalEmail } from "../../utils/emailTemplates";
 import { createNotification } from "../../utils/notification";
 import {
   orderNumber,
@@ -531,7 +532,22 @@ const verifyAndFinalize = async (invoiceId: string) => {
   void safeSendEmail({
     to: order.attendee.user.email,
     subject: `EventFlow order ${order.orderNumber} confirmed`,
-    html: `<h2>Payment confirmed</h2><p>Your order for ${order.event.title} is confirmed. Your digital tickets are now available in EventFlow.</p>`,
+    html: await renderTransactionalEmail({
+      name: order.attendee.user.name,
+      heading: "Payment confirmed — your tickets are ready",
+      message:
+        "Your payment was verified successfully. Your EventFlow order is confirmed and your digital tickets are now available.",
+      preheader: `Order ${order.orderNumber} for ${order.event.title} is confirmed.`,
+      badge: "Payment confirmed",
+      tone: "success",
+      details: [
+        { label: "Order", value: order.orderNumber, code: true },
+        { label: "Event", value: order.event.title },
+      ],
+      highlightTitle: "Keep your digital tickets handy",
+      highlightText:
+        "Open EventFlow before arriving at the venue so your ticket QR code is ready for check-in.",
+    }),
   });
 
   if (!result.updatedOrder) {
