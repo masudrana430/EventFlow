@@ -13,7 +13,10 @@ import { safeDestroyAsset, uploadBuffer } from "../../lib/upload";
 import { AppError } from "../../utils/AppError";
 import { writeAuditLog } from "../../utils/audit";
 import { safeSendEmail, sendEmail } from "../../utils/email";
-import { renderVerificationEmail } from "../../utils/emailTemplates";
+import {
+  renderTransactionalEmail,
+  renderVerificationEmail,
+} from "../../utils/emailTemplates";
 import { createNotification } from "../../utils/notification";
 
 const OTP_TTL = 10 * 60;
@@ -248,7 +251,25 @@ const verifyApplication = async (emailInput: string, otp: string) => {
   void safeSendEmail({
     to: email,
     subject: "EventFlow organizer application received",
-    html: "<p>Your email is verified. Your organizer application is now pending administrative review.</p>",
+    html: await renderTransactionalEmail({
+      name: result.name,
+      heading: "Your organizer application is under review",
+      message:
+        "Your email has been verified and your organizer application was submitted successfully. The EventFlow team will review your application before organizer access is activated.",
+      preheader: "Your EventFlow organizer application is now under review.",
+      badge: "Application received",
+      tone: "info",
+      details: [
+        {
+          label: "Organization",
+          value: result.organizer?.organizationName ?? "EventFlow organizer",
+        },
+        { label: "Status", value: "Pending review" },
+      ],
+      highlightTitle: "What happens next?",
+      highlightText:
+        "An administrator will review your application and you will receive another email when a decision is made.",
+    }),
   });
 
   return result;
@@ -385,10 +406,45 @@ const decideApplication = async (
       status === "APPROVED"
         ? "Your EventFlow organizer account is approved"
         : "Your EventFlow organizer application was rejected",
-    html:
+    html: await renderTransactionalEmail(
       status === "APPROVED"
-        ? "<p>Your organizer account is approved. You may now sign in and create events.</p>"
-        : `<p>Your application was rejected.</p><p>Reason: ${rejectionReason}</p><p>You may reapply after 30 days.</p>`,
+        ? {
+            name: organizer.user.name,
+            heading: "Your organizer account is approved",
+            message:
+              "Your EventFlow organizer application has been approved. You can now sign in, create events, configure ticketing, and manage attendees.",
+            preheader: "Your EventFlow organizer account is approved.",
+            badge: "Approved",
+            tone: "success",
+            details: [
+              { label: "Organization", value: organizer.organizationName },
+              { label: "Status", value: "Approved" },
+            ],
+            highlightTitle: "You're ready to create events",
+            highlightText:
+              "Sign in to EventFlow and create your first event when you're ready.",
+          }
+        : {
+            name: organizer.user.name,
+            heading: "Organizer application decision",
+            message:
+              "Your EventFlow organizer application was not approved at this time.",
+            preheader: "An update is available for your organizer application.",
+            badge: "Not approved",
+            tone: "danger",
+            details: [
+              { label: "Organization", value: organizer.organizationName },
+              { label: "Status", value: "Rejected" },
+              {
+                label: "Reason",
+                value: rejectionReason ?? "No additional reason provided",
+              },
+            ],
+            highlightTitle: "You may apply again",
+            highlightText:
+              "You can submit a new organizer application after the 30-day reapplication period.",
+          },
+    ),
   });
 
   return updated;
