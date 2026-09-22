@@ -15,7 +15,10 @@ import { prisma } from "../../lib/prisma";
 import { redisClient } from "../../lib/redis";
 import { AppError } from "../../utils/AppError";
 import { sendEmail, safeSendEmail } from "../../utils/email";
-import { renderVerificationEmail } from "../../utils/emailTemplates";
+import {
+  renderTransactionalEmail,
+  renderVerificationEmail,
+} from "../../utils/emailTemplates";
 import { jwtUtils } from "../../utils/jwt";
 import { sha256 } from "../../utils/security";
 import type {
@@ -300,7 +303,18 @@ const verifyAttendeeEmail = async (
   void safeSendEmail({
     to: email,
     subject: "Welcome to EventFlow",
-    html: `<h2>Welcome, ${user.name}!</h2><p>Your EventFlow account is verified and ready.</p>`,
+    html: await renderTransactionalEmail({
+      name: user.name,
+      heading: "Welcome to EventFlow",
+      message:
+        "Your email is verified and your attendee account is ready. You can now discover events, purchase tickets, manage your orders, and keep your digital tickets in one place.",
+      preheader: "Your EventFlow attendee account is ready.",
+      badge: "Account ready",
+      tone: "success",
+      highlightTitle: "You're all set",
+      highlightText:
+        "Sign in anytime to explore upcoming events and manage your EventFlow experience.",
+    }),
   });
 
   return { ...tokens, user, attendee };
@@ -513,7 +527,18 @@ const googleLogin = async (
     void safeSendEmail({
       to: email,
       subject: "Welcome to EventFlow",
-      html: `<h2>Welcome, ${user.name}!</h2><p>Your attendee account was created with Google.</p>`,
+      html: await renderTransactionalEmail({
+        name: user.name,
+        heading: "Welcome to EventFlow",
+        message:
+          "Your attendee account was created successfully with Google. You can now discover events, purchase tickets, and manage your EventFlow experience.",
+        preheader: "Your EventFlow account is ready.",
+        badge: "Account ready",
+        tone: "success",
+        highlightTitle: "Google sign-in connected",
+        highlightText:
+          "You can continue signing in securely with your Google account.",
+      }),
     });
   }
 
@@ -548,7 +573,15 @@ const forgotPassword = async (payload: IForgotPasswordPayload) => {
     "forgot-password",
     email,
     "EventFlow password reset code",
-    (otp) => `<p>Your password reset code is <strong>${otp}</strong>. It expires in 10 minutes.</p>`,
+    (otp) =>
+      renderVerificationEmail({
+        name: user.name,
+        otp,
+        heading: "Reset your EventFlow password",
+        message:
+          "We received a request to reset your EventFlow password. Use the verification code below to continue. If you did not make this request, you can safely ignore this email.",
+        preheader: "Your EventFlow password reset code is ready.",
+      }),
   );
 };
 
@@ -588,7 +621,18 @@ const resetPassword = async (payload: IResetPasswordPayload) => {
   void safeSendEmail({
     to: email,
     subject: "Your EventFlow password was changed",
-    html: "<p>Your EventFlow password was reset successfully. All existing sessions were signed out.</p>",
+    html: await renderTransactionalEmail({
+      name: user.name,
+      heading: "Your password was changed",
+      message:
+        "Your EventFlow password was reset successfully. For your security, all existing sessions were signed out.",
+      preheader: "Your EventFlow password was changed successfully.",
+      badge: "Security update",
+      tone: "security",
+      highlightTitle: "Wasn't you?",
+      highlightText:
+        "If you did not reset your password, contact EventFlow support immediately and secure your email account.",
+    }),
   });
 };
 
