@@ -13,6 +13,7 @@ import { safeDestroyAsset, uploadBuffer } from "../../lib/upload";
 import { AppError } from "../../utils/AppError";
 import { writeAuditLog } from "../../utils/audit";
 import { safeSendEmail, sendEmail } from "../../utils/email";
+import { renderVerificationEmail } from "../../utils/emailTemplates";
 import { createNotification } from "../../utils/notification";
 
 const OTP_TTL = 10 * 60;
@@ -143,7 +144,14 @@ const apply = async (
     await sendEmail({
       to: email,
       subject: "Verify your EventFlow organizer application",
-      html: `<p>Your organizer application verification code is <strong>${otp}</strong>.</p><p>It expires in 10 minutes.</p>`,
+      html: await renderVerificationEmail({
+        name: payload.user.name,
+        otp,
+        heading: "Verify your organizer application",
+        message:
+          "Thanks for applying to become an EventFlow organizer. Confirm your email address with the code below so we can securely submit your application for review.",
+        preheader: "Verify your EventFlow organizer application.",
+      }),
     });
   } catch (error) {
     if (verificationDocumentPublicId) {
