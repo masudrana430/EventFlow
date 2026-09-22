@@ -7,6 +7,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { writeAuditLog } from "../../utils/audit";
 import { safeSendEmail } from "../../utils/email";
+import { renderTransactionalEmail } from "../../utils/emailTemplates";
 
 const createAdmin = async (
   actor: { userId: string; role: UserRole },
@@ -64,12 +65,24 @@ const createAdmin = async (
   void safeSendEmail({
     to: payload.personalEmail,
     subject: "Your EventFlow administrative account",
-    html: `
-      <h2>Your EventFlow account was created</h2>
-      <p>Organization email: <strong>${payload.email}</strong></p>
-      <p>Temporary password: <strong>${temporaryPassword}</strong></p>
-      <p>Sign in and change this password immediately.</p>
-    `,
+    html: await renderTransactionalEmail({
+      name: payload.name,
+      heading: "Your administrative account is ready",
+      message:
+        "An EventFlow administrative account has been created for you. Use the credentials below for your first sign-in.",
+      preheader: "Your EventFlow administrative account is ready.",
+      badge: role === UserRole.SUPER_ADMIN ? "Super Admin" : "Admin",
+      tone: "security",
+      details: [
+        { label: "Organization email", value: payload.email },
+        { label: "Temporary password", value: temporaryPassword, code: true },
+      ],
+      highlightTitle: "Change your password after signing in",
+      highlightText:
+        "This is a temporary password. EventFlow will require you to replace it with a password only you know.",
+      note:
+        "If you were not expecting this administrative account, contact the EventFlow platform owner before signing in.",
+    }),
   });
 
   return user;
