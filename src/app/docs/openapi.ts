@@ -121,6 +121,77 @@ const rows = routeRows.split("\n").map((row) => {
   };
 });
 
+const multipartSchemas: Record<string, Record<string, unknown>> = {
+  "PATCH /api/v1/user/profile-image": {
+    type: "object",
+    required: ["profileImage"],
+    properties: {
+      profileImage: {
+        type: "string",
+        format: "binary",
+        description: "Profile image file (JPG, PNG, WEBP, etc.).",
+      },
+    },
+  },
+  "POST /api/v1/organizer/apply": {
+    type: "object",
+    required: ["data", "verificationDocument"],
+    properties: {
+      data: {
+        type: "string",
+        description:
+          "JSON string containing the user and organizer application data.",
+        example: JSON.stringify({
+          user: {
+            name: "Swagger Organizer",
+            email: "organizer@example.com",
+            password: "Organizer@123",
+          },
+          organizer: {
+            organizationName: "Swagger Events Ltd",
+            organizationType: "Event Management",
+            phone: "01700000001",
+            address: "Chattogram, Bangladesh",
+            experience: "5 years of event management experience",
+          },
+        }),
+      },
+      verificationDocument: {
+        type: "string",
+        format: "binary",
+        description: "Organizer verification document (PDF, JPG, PNG, or WEBP).",
+      },
+    },
+  },
+  "PATCH /api/v1/events/{eventId}/cover": {
+    type: "object",
+    required: ["coverImage"],
+    properties: {
+      coverImage: {
+        type: "string",
+        format: "binary",
+        description: "Event cover image.",
+      },
+    },
+  },
+  "PATCH /api/v1/events/{eventId}/gallery": {
+    type: "object",
+    required: ["galleryImages"],
+    properties: {
+      galleryImages: {
+        type: "array",
+        minItems: 1,
+        maxItems: 8,
+        description: "Upload between 1 and 8 event gallery images.",
+        items: {
+          type: "string",
+          format: "binary",
+        },
+      },
+    },
+  },
+};
+
 const paths: Record<string, Record<string, unknown>> = {};
 
 for (const route of rows) {
@@ -144,7 +215,10 @@ for (const route of rows) {
             content: route.multipart
               ? {
                   "multipart/form-data": {
-                    schema: { type: "object", additionalProperties: true },
+                    schema:
+                      multipartSchemas[
+                        `${route.method.toUpperCase()} ${route.path}`
+                      ] ?? { type: "object", additionalProperties: true },
                   },
                 }
               : {
@@ -171,7 +245,7 @@ export const openApiSpec = {
   openapi: "3.0.3",
   info: {
     title: "EventFlow API",
-    version: "2.1.0",
+    version: "2.2.0",
     description:
       "Complete EventFlow backend API reference covering authentication, organizer approval, event moderation, inventory-safe ticketing, UddoktaPay checkout/verification, digital tickets, check-in, refunds, transfers, waitlists, staff, disputes, payouts, notifications and analytics. Protected endpoints accept either an HTTP-only accessToken cookie or a Bearer JWT.",
   },
