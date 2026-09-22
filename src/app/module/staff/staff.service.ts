@@ -11,6 +11,7 @@ import config from "../../config";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { safeSendEmail } from "../../utils/email";
+import { renderTransactionalEmail } from "../../utils/emailTemplates";
 import { randomToken, sha256 } from "../../utils/security";
 
 const getOrganizer = async (userId: string) => {
@@ -155,12 +156,27 @@ const invite = async (
   void safeSendEmail({
     to: payload.email,
     subject: "EventFlow event staff invitation",
-    html: `
-      <h2>You were invited to EventFlow Event Staff</h2>
-      <p>Invitation token: <strong>${token}</strong></p>
-      <p>Temporary password: <strong>${temporaryPassword}</strong></p>
-      <p>This invitation expires in 48 hours. Accept it before signing in.</p>
-    `,
+    html: await renderTransactionalEmail({
+      name: payload.name,
+      heading: "You're invited to join EventFlow Event Staff",
+      message:
+        "An EventFlow organizer invited you to help manage one or more events. Accept the invitation before signing in.",
+      preheader: "You have a new EventFlow event staff invitation.",
+      badge: "Staff invitation",
+      tone: "security",
+      details: [
+        { label: "Invitation token", value: token, code: true },
+        {
+          label: "Temporary password",
+          value: temporaryPassword,
+          code: true,
+        },
+        { label: "Expires", value: "48 hours" },
+      ],
+      highlightTitle: "Keep these credentials private",
+      highlightText:
+        "The invitation token and temporary password grant access to your staff account. Do not share them with anyone.",
+    }),
   });
 
   return {
