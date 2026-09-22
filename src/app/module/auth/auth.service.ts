@@ -15,6 +15,7 @@ import { prisma } from "../../lib/prisma";
 import { redisClient } from "../../lib/redis";
 import { AppError } from "../../utils/AppError";
 import { sendEmail, safeSendEmail } from "../../utils/email";
+import { renderVerificationEmail } from "../../utils/emailTemplates";
 import { jwtUtils } from "../../utils/jwt";
 import { sha256 } from "../../utils/security";
 import type {
@@ -97,7 +98,7 @@ const issueOtp = async (
   prefix: string,
   email: string,
   subject: string,
-  html: (otp: string) => string,
+  html: (otp: string) => string | Promise<string>,
 ) => {
   if (!redisClient.isOpen) {
     throw new AppError(
@@ -127,7 +128,7 @@ const issueOtp = async (
     await sendEmail({
       to: email,
       subject,
-      html: html(otp),
+      html: await html(otp),
     });
   } catch (error) {
     await redisClient
@@ -206,11 +207,15 @@ const registerAttendee = async (payload: IRegisterAttendeePayload) => {
     "attendee-registration",
     email,
     "Verify your EventFlow account",
-    (otp) => `
-      <h2>Verify your EventFlow account</h2>
-      <p>Your verification code is <strong>${otp}</strong>.</p>
-      <p>This code expires in 10 minutes.</p>
-    `,
+    (otp) =>
+      renderVerificationEmail({
+        name: payload.name,
+        otp,
+        heading: "Verify your EventFlow account",
+        message:
+          "You're one step away from joining EventFlow. Enter the verification code below to confirm your email address and finish creating your attendee account.",
+        preheader: "Your EventFlow verification code is ready.",
+      }),
   );
 };
 
@@ -225,11 +230,21 @@ const resendAttendeeOtp = async (emailInput: string) => {
     );
   }
 
+  const registration = JSON.parse(data) as { name?: string };
+
   await issueOtp(
     "attendee-registration",
     email,
     "Your new EventFlow verification code",
-    (otp) => `<p>Your new EventFlow verification code is <strong>${otp}</strong>.</p>`,
+    (otp) =>
+      renderVerificationEmail({
+        name: registration.name ?? "there",
+        otp,
+        heading: "Here is your new verification code",
+        message:
+          "You requested a fresh EventFlow verification code. Use the code below to continue your account verification.",
+        preheader: "Your new EventFlow verification code is ready.",
+      }),
   );
 };
 
