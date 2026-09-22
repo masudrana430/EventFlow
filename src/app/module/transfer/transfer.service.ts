@@ -8,6 +8,7 @@ import {
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { safeSendEmail } from "../../utils/email";
+import { renderTransactionalEmail } from "../../utils/emailTemplates";
 import {
   randomToken,
   sha256,
@@ -74,7 +75,24 @@ const create = async (
   void safeSendEmail({
     to: recipientEmail,
     subject: "EventFlow ticket transfer invitation",
-    html: `<p>You received a ticket transfer invitation.</p><p>Transfer token: <strong>${token}</strong></p><p>The invitation expires in 48 hours.</p>`,
+    html: await renderTransactionalEmail({
+      name: "EventFlow attendee",
+      heading: "A ticket is waiting for you",
+      message:
+        "Someone has invited you to receive an EventFlow ticket transfer. Sign in with the recipient email address and use the transfer token below to accept it.",
+      preheader: `Ticket transfer invitation for ${ticket.event.title}.`,
+      badge: "Ticket transfer",
+      tone: "info",
+      details: [
+        { label: "Event", value: ticket.event.title },
+        { label: "Ticket type", value: ticket.ticketType.name },
+        { label: "Transfer token", value: token, code: true },
+        { label: "Expires", value: "48 hours" },
+      ],
+      highlightTitle: "Use the intended recipient account",
+      highlightText:
+        "For security, the transfer can only be accepted by an EventFlow attendee signed in with the recipient email address.",
+    }),
   });
 
   return { transfer, token };
