@@ -1,90 +1,65 @@
 import { z } from "zod";
 
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .regex(/[A-Z]/, "Password must contain an uppercase letter")
+  .regex(/[a-z]/, "Password must contain a lowercase letter")
+  .regex(/[0-9]/, "Password must contain a number")
+  .regex(/[^A-Za-z0-9]/, "Password must contain a special character");
+
 const attendeeRegistrationZodSchema = z.object({
-  name: z
-    .string("Name must be a string")
-    .trim()
-    .min(3, "Name must be at least 3 characters")
-    .max(100, "Name must not exceed 100 characters"),
-
-  email: z.email("Invalid email address").trim().toLowerCase(),
-
-  password: z
-    .string("Password must be a string")
-    .min(8, "Password must be at least 8 characters long")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(
-      /[^A-Za-z0-9]/,
-      "Password must contain at least one special character",
-    ),
-
+  name: z.string().trim().min(3).max(100),
+  email: z.email().trim().toLowerCase(),
+  password: passwordSchema,
   attendee: z
     .object({
-      phone: z.string("Phone must be a string").trim().optional(),
-
-      location: z
-        .string("Location must be a string")
-        .trim()
-        .max(150)
-        .optional(),
+      phone: z.string().trim().optional(),
+      location: z.string().trim().max(150).optional(),
     })
     .optional(),
 });
 
 const attendeeEmailVerifyZodSchema = z.object({
-	email: z
-		.email("Invalid email address")
-		.trim()
-		.toLowerCase(),
-
-	otp: z
-		.string()
-		.length(6, "OTP must be 6 digits")
-		.regex(/^\d{6}$/, "OTP must contain only numbers"),
+  email: z.email().trim().toLowerCase(),
+  otp: z.string().regex(/^\d{6}$/, "OTP must contain 6 digits"),
 });
 
- const PatientEmailVerifyZodSchema = z.object({
-    
-    email: z.email("Not email!!"),
-     otp: z.string().length(6)
-   
-})
+const loginZodSchema = z.object({
+  email: z.email().trim().toLowerCase(),
+  password: z.string().min(1),
+});
 
-const LoginZodSchema = z.object({
-    email : z.email(),
-    password: z.string()
-        .min(8, "Password Must Minimum 8 Characters Long.")
-        .regex(/[a-z]/, "Password must contain atleast 1 Lowercase Letter")
-        .regex(/[A-Z]/, "Password must contain atleast 1 Uppercase Letter")
+const forgotPasswordZodSchema = z.object({
+  email: z.email().trim().toLowerCase(),
+});
 
-        .regex(/[0-9]/, "Password must contain atleast 1 Number")
-        .regex(/[^A-Za-z0-9]/, "Password must contain atleast 1 Special Character"),
-})
+const resetPasswordZodSchema = z.object({
+  email: z.email().trim().toLowerCase(),
+  newPassword: passwordSchema,
+  otp: z.string().regex(/^\d{6}$/, "OTP must contain 6 digits"),
+});
 
-const ForgotPasswordZodSchema = z.object({
-    email: z.email()
-})
+const googleLoginZodSchema = z.object({
+  idToken: z.string().min(20),
+});
 
-const ResetPasswordZodSchema = z.object({
-    email: z.email(),
-    newPassword: z.string()
-        .min(8, "Password Must Minimum 8 Characters Long.")
-        .regex(/[a-z]/, "Password must contain atleast 1 Lowercase Letter")
-        .regex(/[A-Z]/, "Password must contain atleast 1 Uppercase Letter")
+const changePasswordZodSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: passwordSchema,
+});
 
-        .regex(/[0-9]/, "Password must contain atleast 1 Number")
-        .regex(/[^A-Za-z0-9]/, "Password must contain atleast 1 Special Character"),
-    otp : z.string().length(6)
-})
-
+const setPasswordZodSchema = z.object({
+  newPassword: passwordSchema,
+});
 
 export const userValidation = {
   attendeeRegistrationZodSchema,
   attendeeEmailVerifyZodSchema,
-  PatientEmailVerifyZodSchema,
-  loginZodSchema: LoginZodSchema,
-  ForgotPasswordZodSchema,
-  ResetPasswordZodSchema
+  loginZodSchema,
+  forgotPasswordZodSchema,
+  resetPasswordZodSchema,
+  googleLoginZodSchema,
+  changePasswordZodSchema,
+  setPasswordZodSchema,
 };

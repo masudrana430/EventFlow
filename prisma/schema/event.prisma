@@ -1,0 +1,90 @@
+model EventCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events Event[]
+}
+
+model Event {
+  id String @id @default(cuid())
+
+  organizerId String
+  organizer   Organizer @relation(fields: [organizerId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   EventCategory @relation(fields: [categoryId], references: [id])
+
+  title            String
+  slug             String @unique
+  shortDescription String
+  description      String
+
+  coverImageUrl      String?
+  coverImagePublicId String?
+  galleryUrls        String[] @default([])
+
+  venueName    String
+  venueAddress String
+  latitude     Float?
+  longitude    Float?
+
+  startDateTime DateTime
+  endDateTime   DateTime
+  entryOpenTime DateTime
+
+  saleStartAt DateTime
+  saleEndAt   DateTime
+
+  contactEmail String
+  contactPhone String?
+
+  ageRestriction Int?
+  policies       String[] @default([])
+
+  refundPolicyType RefundPolicyType @default(DEFAULT)
+  refundDeadline   DateTime?
+  refundPercentage Int?
+
+  capacity Int
+
+  status             EventStatus @default(DRAFT)
+  rejectionReason    String?
+  requestedChanges   String?
+  suspendedReason    String?
+  cancellationReason String?
+
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  publishAt   DateTime?
+  publishedAt DateTime?
+  completedAt DateTime?
+  cancelledAt DateTime?
+
+  isDeleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ticketTypes      TicketType[]
+  reservations     TicketReservation[]
+  orders           Order[]
+  tickets          Ticket[]
+  staffAssignments EventStaffAssignment[]
+  waitlist         WaitlistEntry[]
+  promoCodes       PromoCode[]
+  announcements    Announcement[]
+  reviews          Review[]
+  disputes         Dispute[]
+  checkIns         CheckIn[]
+  payout           Payout?
+
+  @@index([status, startDateTime])
+  @@index([categoryId, status])
+  @@index([organizerId, status])
+}

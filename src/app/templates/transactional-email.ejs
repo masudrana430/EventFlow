@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
+  <title><%= heading %></title>
+</head>
+<body style="margin:0;padding:0;background:#f4f7fb;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
+    <%= preheader %>
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;background:#f4f7fb;">
+    <tr>
+      <td align="center" style="padding:36px 16px;">
+        <table role="presentation" width="620" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:620px;background:#ffffff;border-radius:22px;overflow:hidden;box-shadow:0 20px 50px rgba(15,23,42,0.10);">
+          <tr>
+            <td style="background:#111827;padding:28px 34px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td>
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td width="46" height="46" align="center" valign="middle" style="width:46px;height:46px;background:#ffffff;border-radius:14px;font-size:18px;font-weight:800;color:#111827;">
+                          EF
+                        </td>
+                        <td style="padding-left:14px;">
+                          <div style="font-size:24px;line-height:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">
+                            Event<span style="color:#a78bfa;">Flow</span>
+                          </div>
+                          <div style="margin-top:4px;font-size:12px;line-height:18px;color:#cbd5e1;">
+                            Events, tickets and experiences — simplified.
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td align="right" valign="middle">
+                    <span style="display:inline-block;padding:8px 12px;border:1px solid #374151;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;color:<%= colors.accentLight %>;">
+                      <%= badge %>
+                    </span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:42px 40px 18px;">
+              <div style="font-size:14px;line-height:22px;color:#64748b;">
+                Hello <strong style="color:#334155;"><%= name %></strong>,
+              </div>
+
+              <h1 style="margin:12px 0 14px;font-size:30px;line-height:38px;font-weight:800;letter-spacing:-0.7px;color:#0f172a;">
+                <%= heading %>
+              </h1>
+
+              <p style="margin:0;font-size:16px;line-height:26px;color:#475569;">
+                <%= message %>
+              </p>
+            </td>
+          </tr>
+
+          <% if (details && details.length) { %>
+          <tr>
+            <td style="padding:10px 40px 24px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+                <% details.forEach(function(detail, index) { %>
+                <tr>
+                  <td style="padding:14px 18px;font-size:13px;line-height:20px;font-weight:700;color:#64748b;<%= index ? 'border-top:1px solid #e2e8f0;' : '' %>">
+                    <%= detail.label %>
+                  </td>
+                  <td align="right" style="padding:14px 18px;font-size:14px;line-height:20px;font-weight:800;color:#0f172a;<%= index ? 'border-top:1px solid #e2e8f0;' : '' %><%= detail.code ? 'font-family:Courier New,Courier,monospace;word-break:break-all;' : '' %>">
+                    <%= detail.value %>
+                  </td>
+                </tr>
+                <% }); %>
+              </table>
+            </td>
+          </tr>
+          <% } %>
+
+          <% if (highlightTitle || highlightText) { %>
+          <tr>
+            <td style="padding:0 40px 24px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:<%= colors.background %>;border:1px solid <%= colors.border %>;border-left:4px solid <%= colors.accent %>;border-radius:14px;">
+                <tr>
+                  <td style="padding:17px 18px;">
+                    <% if (highlightTitle) { %>
+                    <div style="font-size:14px;line-height:20px;font-weight:800;color:<%= colors.text %>;">
+                      <%= highlightTitle %>
+                    </div>
+                    <% } %>
+                    <% if (highlightText) { %>
+                    <div style="margin-top:<%= highlightTitle ? '5px' : '0' %>;font-size:13px;line-height:21px;color:#64748b;">
+                      <%= highlightText %>
+                    </div>
+                    <% } %>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <% } %>
+
+          <% if (actionLabel && actionUrl) { %>
+          <tr>
+            <td align="center" style="padding:2px 40px 28px;">
+              <a href="<%= actionUrl %>" style="display:inline-block;background:<%= colors.accent %>;color:#ffffff;text-decoration:none;font-size:14px;font-weight:800;line-height:20px;padding:13px 22px;border-radius:12px;">
+                <%= actionLabel %>
+              </a>
+            </td>
+          </tr>
+          <% } %>
+
+          <% if (note) { %>
+          <tr>
+            <td style="padding:0 40px 34px;">
+              <p style="margin:0;font-size:13px;line-height:21px;color:#64748b;">
+                <%= note %>
+              </p>
+            </td>
+          </tr>
+          <% } %>
+
+          <tr>
+            <td style="padding:0 40px 40px;">
+              <p style="margin:0;font-size:14px;line-height:22px;color:#475569;">
+                Regards,<br />
+                <strong style="color:#0f172a;">The EventFlow Team</strong>
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:22px 40px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0 0 6px;font-size:12px;line-height:18px;color:#94a3b8;">
+                This is an automated message from EventFlow.
+              </p>
+              <p style="margin:0;font-size:12px;line-height:18px;color:#94a3b8;">
+                © <%= year %> EventFlow. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <p style="margin:18px 0 0;font-size:12px;line-height:18px;color:#94a3b8;">
+          Secure events. Seamless experiences.
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

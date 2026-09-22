@@ -27,4 +27,122 @@ enum StaffInvitationStatus {
 enum AuthProvider {
   GOOGLE
   CREDENTIALS
+  BOTH
+}
+
+enum EventStatus {
+  DRAFT
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  PUBLISHED
+  ONGOING
+  COMPLETED
+  REJECTED
+  SUSPENDED
+  CANCELLED
+}
+
+enum ReservationStatus {
+  ACTIVE
+  CONVERTED
+  EXPIRED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  COMPLETED
+  PAYMENT_FAILED
+  EXPIRED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum TicketStatus {
+  VALID
+  CHECKED_IN
+  TRANSFERRED
+  CANCELLED
+  REFUNDED
+  VOID
+}
+
+enum CheckInMethod {
+  QR
+  MANUAL
+}
+
+enum TransferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum WaitlistStatus {
+  WAITING
+  OFFERED
+  CONVERTED
+  EXPIRED
+  CANCELLED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  REFUNDED
+  REJECTED
+  FAILED
+  CANCELLED
+}
+
+enum RefundPolicyType {
+  DEFAULT
+  FULL_UNTIL
+  PARTIAL_UNTIL
+  NON_REFUNDABLE
+  ORGANIZER_APPROVAL
+}
+
+enum DisputeStatus {
+  OPEN
+  ORGANIZER_RESPONDED
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  ELIGIBLE
+  REQUESTED
+  PROCESSING
+  PAID
+  HELD
+  REJECTED
+  FAILED
+}
+
+enum ReviewStatus {
+  VISIBLE
+  HIDDEN
 }
