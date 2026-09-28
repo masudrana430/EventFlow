@@ -176,6 +176,10 @@ const invite = async (
       highlightTitle: "Keep these credentials private",
       highlightText:
         "The invitation token and temporary password grant access to your staff account. Do not share them with anyone.",
+      actionLabel: "Accept staff invitation",
+      actionUrl: "https://event-flow-frontend-nu.vercel.app/staff/accept",
+      note:
+        "Open the invitation page using the button above, then paste the invitation token from this email to activate your staff account.",
     }),
   });
 
