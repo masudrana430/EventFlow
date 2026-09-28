@@ -1,27 +1,33 @@
-/** biome-ignore-all lint/correctness/noUnusedImports: <explanation> */
-/** biome-ignore-all assist/source/organizeImports: <explanation> */
 import { Router } from "express";
 import { UserRole } from "../../../generated/prisma/enums";
 import { upload } from "../../lib/multer";
 import { auth } from "../../middleware/checkAuth";
+import { validateRequest } from "../../middleware/validateRequest";
 import { UserController } from "./user.controller";
+import { updateProfileSchema } from "./user.validation";
 
 const router = Router();
 
+const allRoles = auth(
+  UserRole.SUPER_ADMIN,
+  UserRole.ADMIN,
+  UserRole.ORGANIZER,
+  UserRole.EVENT_STAFF,
+  UserRole.ATTENDEE,
+);
+
 router.patch(
-	"/profile-image",
+  "/profile",
+  allRoles,
+  validateRequest(updateProfileSchema),
+  UserController.updateMyProfile,
+);
 
-	auth(
-		UserRole.SUPER_ADMIN,
-		UserRole.ADMIN,
-		UserRole.ORGANIZER,
-		UserRole.EVENT_STAFF,
-		UserRole.ATTENDEE,
-	),
-
-	upload.single("profileImage"),
-
-	UserController.uploadProfileImage,
+router.patch(
+  "/profile-image",
+  allRoles,
+  upload.single("profileImage"),
+  UserController.uploadProfileImage,
 );
 
 export const UserRoutes = router;

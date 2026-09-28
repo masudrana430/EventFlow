@@ -1,35 +1,44 @@
 import app from "./app";
 import config from "./app/config";
-import { transporter } from "./app/lib/nodeMailer";
+import { startBackgroundJobs } from "./app/jobs/scheduler";
 import { prisma } from "./app/lib/prisma";
 import { redisClient } from "./app/lib/redis";
 import { seedSuperAdmin, seedTesterAdmin } from "./app/utils/seed";
 
-const PORT = config.port;
-
 const main = async () => {
-  try {
-    await prisma.$connect();
-    console.log("Connected to the database successfully.");
+  await prisma.$connect();
+  console.log("Connected to PostgreSQL.");
 
-    await redisClient.connect();
-    console.log("Connected to Redis successfully.");
+  await seedSuperAdmin();
+  await seedTesterAdmin();
 
-    await transporter.verify();
-    console.log("NodeMailer conneccted successfully");
+  const server = app.listen(config.port, () => {
+    console.log(`EventFlow API is running on port ${config.port}`);
+  });
 
-    await seedSuperAdmin();
-    await seedTesterAdmin();
+  redisClient
+    .connect()
+    .then(() => console.log("Connected to Redis."))
+    .catch((error) => console.error("Redis unavailable:", error));
 
-    console.log("Connected to the database successfully.");
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
+  startBackgroundJobs();
+
+  const shutdown = async (signal: string) => {
+    console.log(`${signal} received. Shutting down EventFlow...`);
+
+    server.close(async () => {
+      if (redisClient.isOpen) await redisClient.quit().catch(() => undefined);
+      await prisma.$disconnect();
+      process.exit(0);
     });
-  } catch (error) {
-    console.error("Error starting the server:", error);
-    await prisma.$disconnect();
-    process.exit(1);
-  }
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 };
 
-main();
+main().catch(async (error) => {
+  console.error("Failed to start EventFlow:", error);
+  await prisma.$disconnect().catch(() => undefined);
+  process.exit(1);
+});

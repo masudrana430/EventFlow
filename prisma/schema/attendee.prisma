@@ -10,4 +10,13 @@ model Attendee {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  reservations     TicketReservation[]
+  orders           Order[]
+  tickets          Ticket[]
+  waitlist         WaitlistEntry[]
+  reviews          Review[]
+  disputes         Dispute[]
+  transfersSent    TicketTransfer[]
+  promoRedemptions PromoCodeRedemption[]
 }

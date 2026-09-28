@@ -1,0 +1,149 @@
+model TicketTransfer {
+  id String @id @default(cuid())
+
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id])
+
+  senderAttendeeId String
+  sender           Attendee @relation(fields: [senderAttendeeId], references: [id])
+
+  recipientEmail      String
+  recipientAttendeeId String?
+
+  tokenHash         String @unique
+  status            TransferStatus @default(PENDING)
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  replacementTicket String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([recipientEmail, status])
+}
+
+model WaitlistEntry {
+  id String @id @default(cuid())
+
+  attendeeId String
+  attendee   Attendee @relation(fields: [attendeeId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+
+  status         WaitlistStatus @default(WAITING)
+  offeredAt      DateTime?
+  offerExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([attendeeId, ticketTypeId])
+  @@index([ticketTypeId, status, createdAt])
+}
+
+model PromoCode {
+  id String @id @default(cuid())
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  code         String @unique
+  discountType DiscountType
+  value        Decimal @db.Decimal(12, 2)
+
+  maxUses        Int?
+  usedCount      Int @default(0)
+  minOrderAmount Decimal? @db.Decimal(12, 2)
+
+  startAt DateTime
+  endAt   DateTime
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders      Order[]
+  redemptions PromoCodeRedemption[]
+
+  @@index([eventId, isActive])
+}
+
+model PromoCodeRedemption {
+  id String @id @default(cuid())
+
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+
+  attendeeId String
+  attendee   Attendee @relation(fields: [attendeeId], references: [id])
+
+  orderId String
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([promoCodeId, attendeeId, orderId])
+}
+
+model Announcement {
+  id String @id @default(cuid())
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  organizerId String
+  title       String
+  message     String
+  sentAt      DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    String
+  title   String
+  message String
+
+  resourceType String?
+  resourceId   String?
+
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+model Review {
+  id String @id @default(cuid())
+
+  attendeeId String
+  attendee   Attendee @relation(fields: [attendeeId], references: [id])
+
+  eventId String
+  event   Event @relation(fields: [eventId], references: [id])
+
+  organizerId String
+
+  rating  Int
+  comment String
+  images  String[] @default([])
+
+  status ReviewStatus @default(VISIBLE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([attendeeId, eventId])
+  @@index([eventId, status])
+}

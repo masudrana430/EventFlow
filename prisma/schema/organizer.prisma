@@ -10,20 +10,26 @@ model Organizer {
   phone   String
   address String
 
-  verificationDocument String?
+  verificationDocument         String?
+  verificationDocumentPublicId String?
 
   websiteUrl     String?
   socialMediaUrl String?
+  experience     String?
 
-  experience String?
-
-  approvalStatus OrganizerApprovalStatus @default(PENDING)
-
+  approvalStatus  OrganizerApprovalStatus @default(PENDING)
   rejectionReason String?
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
 
-  approvedAt DateTime?
-  rejectedAt DateTime?
+  payoutAccountName   String?
+  payoutAccountNumber String?
+  payoutMethod        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  events           Event[]
+  staffInvitations EventStaff[]
+  payouts          Payout[]
 }
