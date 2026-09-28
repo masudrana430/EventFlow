@@ -7,16 +7,14 @@ import {
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 
-type MoneyGroup = {
-  currency: string;
-  _sum: Record<string, unknown>;
-};
-
-const moneyMap = (rows: MoneyGroup[], field: string) =>
+const moneyMap = (
+  rows: Array<{ currency: string; _sum: Record<string, unknown> }>,
+  field: string,
+) =>
   Object.fromEntries(
     rows.map((row) => [
       row.currency,
-      Number((row._sum[field] as number | string | null | undefined) ?? 0),
+      Number((row._sum[field] as number | null | undefined) ?? 0),
     ]),
   );
 
@@ -53,7 +51,7 @@ const attendee = async (userId: string) => {
   return {
     totalOrders: orders,
     totalTickets: tickets,
-    amountSpentByCurrency: moneyMap(spent as MoneyGroup[], "total"),
+    amountSpentByCurrency: moneyMap(spent as never, "total"),
     upcomingTickets: upcoming,
   };
 };
@@ -95,9 +93,7 @@ const organizer = async (userId: string) => {
       _sum: { total: true },
       _count: { id: true },
     }),
-    prisma.ticket.count({
-      where: { event: { organizerId: profile.id } },
-    }),
+    prisma.ticket.count({ where: { event: { organizerId: profile.id } } }),
     prisma.ticket.count({
       where: {
         event: { organizerId: profile.id },
@@ -124,19 +120,13 @@ const organizer = async (userId: string) => {
     publishedEvents,
     completedEvents,
     paidOrders: orderStats.reduce((sum, row) => sum + row._count.id, 0),
-    grossTicketRevenueByCurrency: moneyMap(
-      orderStats as MoneyGroup[],
-      "total",
-    ),
+    grossTicketRevenueByCurrency: moneyMap(orderStats as never, "total"),
     ticketsSold: soldTickets,
     checkedIn,
     checkInRate: soldTickets
       ? Number(((checkedIn / soldTickets) * 100).toFixed(2))
       : 0,
-    refundAmountByCurrency: moneyMap(
-      refunds as MoneyGroup[],
-      "approvedAmount",
-    ),
+    refundAmountByCurrency: moneyMap(refunds as never, "approvedAmount"),
     payoutHistory: payouts,
   };
 };
@@ -195,9 +185,7 @@ const admin = async () => {
       _count: { id: true },
     }),
     prisma.dispute.count({
-      where: {
-        status: { in: ["OPEN", "ORGANIZER_RESPONDED", "UNDER_REVIEW"] },
-      },
+      where: { status: { in: ["OPEN", "ORGANIZER_RESPONDED", "UNDER_REVIEW"] } },
     }),
     prisma.payout.groupBy({
       by: ["currency"],
@@ -215,28 +203,13 @@ const admin = async () => {
     publishedEvents,
     pendingEventReviews: pendingEvents,
     ticketSalesVolume: sales.reduce((sum, row) => sum + row._count.id, 0),
-    grossMerchandiseValueByCurrency: moneyMap(
-      sales as MoneyGroup[],
-      "total",
-    ),
-    platformServiceFeeRevenueByCurrency: moneyMap(
-      sales as MoneyGroup[],
-      "serviceFee",
-    ),
+    grossMerchandiseValueByCurrency: moneyMap(sales as never, "total"),
+    platformServiceFeeRevenueByCurrency: moneyMap(sales as never, "serviceFee"),
     refundVolume: refunds.reduce((sum, row) => sum + row._count.id, 0),
-    refundAmountByCurrency: moneyMap(
-      refunds as MoneyGroup[],
-      "approvedAmount",
-    ),
+    refundAmountByCurrency: moneyMap(refunds as never, "approvedAmount"),
     openDisputes,
-    completedPayouts: paidPayouts.reduce(
-      (sum, row) => sum + row._count.id,
-      0,
-    ),
-    payoutAmountByCurrency: moneyMap(
-      paidPayouts as MoneyGroup[],
-      "netAmount",
-    ),
+    completedPayouts: paidPayouts.reduce((sum, row) => sum + row._count.id, 0),
+    payoutAmountByCurrency: moneyMap(paidPayouts as never, "netAmount"),
     suspendedEvents,
   };
 };
