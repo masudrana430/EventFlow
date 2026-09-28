@@ -50,7 +50,21 @@ const request = async <T>(path: string, body: Record<string, unknown>) => {
   const data = (await response.json().catch(() => ({}))) as T;
 
   if (!response.ok) {
-    throw new AppError(httpStatus.BAD_GATEWAY, "UddoktaPay request failed");
+    const providerMessage =
+      data && typeof data === "object" && "message" in (data as object)
+        ? String((data as { message?: unknown }).message ?? "")
+        : "";
+
+    console.error("UddoktaPay request failed", {
+      path,
+      status: response.status,
+      message: providerMessage || undefined,
+    });
+
+    throw new AppError(
+      httpStatus.BAD_GATEWAY,
+      providerMessage || "UddoktaPay request failed",
+    );
   }
 
   return data;

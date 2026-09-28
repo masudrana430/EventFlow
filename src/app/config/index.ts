@@ -48,6 +48,8 @@ const config = {
   uddoktapay_base_url:
     process.env.UDDOKTAPAY_BASE_URL ?? "https://sandbox.uddoktapay.com",
   uddoktapay_api_key: process.env.UDDOKTAPAY_API_KEY ?? "",
+  uddoktapay_currency:
+    process.env.UDDOKTAPAY_CURRENCY === "USD" ? "USD" : "BDT",
 
   reservation_minutes: Number(process.env.RESERVATION_MINUTES ?? 10),
   service_fee_percent: Number(process.env.SERVICE_FEE_PERCENT ?? 5),

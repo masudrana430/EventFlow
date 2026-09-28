@@ -229,6 +229,13 @@ const checkout = async (
     ((subtotal - discount) * (config.service_fee_percent / 100)).toFixed(2),
   );
   const total = Number((subtotal - discount + serviceFee).toFixed(2));
+
+  if (total > 0 && type.event.currency !== config.uddoktapay_currency) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      `Payment gateway is configured for ${config.uddoktapay_currency}; this event uses ${type.event.currency}`,
+    );
+  }
   const expiresAt = new Date(
     Date.now() + config.reservation_minutes * 60 * 1000,
   );
@@ -269,6 +276,7 @@ const checkout = async (
         serviceFee,
         discount,
         total,
+        currency: type.event.currency,
         expiresAt,
         items: {
           create: {
@@ -284,6 +292,7 @@ const checkout = async (
             gateway: total === 0 ? "FREE" : "UDDOKTAPAY",
             invoiceId: `LOCAL-${number}`,
             amount: total,
+            currency: type.event.currency,
             status: PaymentStatus.PENDING,
           },
         },
@@ -317,6 +326,7 @@ const checkout = async (
       metadata: {
         order_id: order.id,
         order_number: order.orderNumber,
+        currency: type.event.currency,
       },
       redirect_url: `${config.backend_url}/api/v1/payment/uddoktapay/callback`,
       cancel_url: `${config.backend_url}/api/v1/payment/uddoktapay/cancel`,
@@ -392,6 +402,14 @@ const verifyAndFinalize = async (invoiceId: string) => {
 
   if (!order?.payment) {
     throw new AppError(httpStatus.NOT_FOUND, "Local payment record not found");
+  }
+
+  const verifiedCurrency = String(verified.metadata?.currency ?? "").toUpperCase();
+  if (verifiedCurrency && verifiedCurrency !== order.currency) {
+    throw new AppError(
+      httpStatus.BAD_GATEWAY,
+      "Verified payment currency does not match order currency",
+    );
   }
 
   if (
@@ -520,19 +538,21 @@ const verifyAndFinalize = async (invoiceId: string) => {
     return { updatedOrder, tickets };
   });
 
-  await createNotification({
-    userId: order.attendee.userId,
-    type: "ORDER_PAID",
-    title: "Ticket purchase completed",
-    message: `Payment for order ${order.orderNumber} was verified successfully.`,
-    resourceType: "Order",
-    resourceId: order.id,
-  });
+  try {
+    await createNotification({
+      userId: order.attendee.userId,
+      type: "ORDER_PAID",
+      title: "Ticket purchase completed",
+      message: `Payment for order ${order.orderNumber} was verified successfully.`,
+      resourceType: "Order",
+      resourceId: order.id,
+    });
+  } catch (error) {
+    console.error("Post-payment notification failed:", error);
+  }
 
-  void safeSendEmail({
-    to: order.attendee.user.email,
-    subject: `EventFlow order ${order.orderNumber} confirmed`,
-    html: await renderTransactionalEmail({
+  try {
+    const html = await renderTransactionalEmail({
       name: order.attendee.user.name,
       heading: "Payment confirmed — your tickets are ready",
       message:
@@ -543,12 +563,21 @@ const verifyAndFinalize = async (invoiceId: string) => {
       details: [
         { label: "Order", value: order.orderNumber, code: true },
         { label: "Event", value: order.event.title },
+        { label: "Currency", value: order.currency },
       ],
       highlightTitle: "Keep your digital tickets handy",
       highlightText:
         "Open EventFlow before arriving at the venue so your ticket QR code is ready for check-in.",
-    }),
-  });
+    });
+
+    void safeSendEmail({
+      to: order.attendee.user.email,
+      subject: `EventFlow order ${order.orderNumber} confirmed`,
+      html,
+    });
+  } catch (error) {
+    console.error("Post-payment email preparation failed:", error);
+  }
 
   if (!result.updatedOrder) {
     throw new AppError(

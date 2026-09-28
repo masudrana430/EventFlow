@@ -30,6 +30,11 @@ enum AuthProvider {
   BOTH
 }
 
+enum Currency {
+  BDT
+  USD
+}
+
 enum EventStatus {
   DRAFT
   PENDING_REVIEW

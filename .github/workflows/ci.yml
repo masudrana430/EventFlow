@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feature/complete-eventflow-backend
+      - feature/multi-currency
   pull_request:
     branches:
       - main

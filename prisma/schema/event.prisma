@@ -52,6 +52,7 @@ model Event {
   refundPercentage Int?
 
   capacity Int
+  currency Currency @default(BDT)
 
   status             EventStatus @default(DRAFT)
   rejectionReason    String?
