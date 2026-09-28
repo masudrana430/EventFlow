@@ -99,6 +99,7 @@ const request = async (
       attendeeId: attendee.id,
       reason: payload.reason,
       requestedAmount: amount || Number(ticket.ticketType.price),
+      currency: ticket.order.currency,
     },
   });
 };

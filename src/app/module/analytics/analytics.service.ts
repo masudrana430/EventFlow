@@ -3,10 +3,22 @@ import {
   EventStatus,
   OrderStatus,
   TicketStatus,
-  UserRole,
 } from "../../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
+
+type MoneyGroup = {
+  currency: string;
+  _sum: Record<string, unknown>;
+};
+
+const moneyMap = (rows: MoneyGroup[], field: string) =>
+  Object.fromEntries(
+    rows.map((row) => [
+      row.currency,
+      Number((row._sum[field] as number | string | null | undefined) ?? 0),
+    ]),
+  );
 
 const attendee = async (userId: string) => {
   const profile = await prisma.attendee.findUnique({ where: { userId } });
@@ -15,7 +27,8 @@ const attendee = async (userId: string) => {
   const [orders, tickets, spent, upcoming] = await prisma.$transaction([
     prisma.order.count({ where: { attendeeId: profile.id } }),
     prisma.ticket.count({ where: { ownerId: profile.id } }),
-    prisma.order.aggregate({
+    prisma.order.groupBy({
+      by: ["currency"],
       where: {
         attendeeId: profile.id,
         status: {
@@ -40,7 +53,7 @@ const attendee = async (userId: string) => {
   return {
     totalOrders: orders,
     totalTickets: tickets,
-    totalAmountSpent: Number(spent._sum.total ?? 0),
+    amountSpentByCurrency: moneyMap(spent as MoneyGroup[], "total"),
     upcomingTickets: upcoming,
   };
 };
@@ -66,7 +79,8 @@ const organizer = async (userId: string) => {
     prisma.event.count({
       where: { organizerId: profile.id, status: EventStatus.COMPLETED },
     }),
-    prisma.order.aggregate({
+    prisma.order.groupBy({
+      by: ["currency"],
       where: {
         event: { organizerId: profile.id },
         status: {
@@ -90,7 +104,8 @@ const organizer = async (userId: string) => {
         status: TicketStatus.CHECKED_IN,
       },
     }),
-    prisma.refund.aggregate({
+    prisma.refund.groupBy({
+      by: ["currency"],
       where: {
         order: { event: { organizerId: profile.id } },
         status: "REFUNDED",
@@ -108,12 +123,20 @@ const organizer = async (userId: string) => {
     totalEvents,
     publishedEvents,
     completedEvents,
-    paidOrders: orderStats._count.id,
-    grossTicketRevenue: Number(orderStats._sum.total ?? 0),
+    paidOrders: orderStats.reduce((sum, row) => sum + row._count.id, 0),
+    grossTicketRevenueByCurrency: moneyMap(
+      orderStats as MoneyGroup[],
+      "total",
+    ),
     ticketsSold: soldTickets,
     checkedIn,
-    checkInRate: soldTickets ? Number(((checkedIn / soldTickets) * 100).toFixed(2)) : 0,
-    refundAmount: Number(refunds._sum.approvedAmount ?? 0),
+    checkInRate: soldTickets
+      ? Number(((checkedIn / soldTickets) * 100).toFixed(2))
+      : 0,
+    refundAmountByCurrency: moneyMap(
+      refunds as MoneyGroup[],
+      "approvedAmount",
+    ),
     payoutHistory: payouts,
   };
 };
@@ -150,7 +173,8 @@ const admin = async () => {
     prisma.organizer.count({ where: { approvalStatus: "APPROVED" } }),
     prisma.event.count({ where: { status: EventStatus.PUBLISHED } }),
     prisma.event.count({ where: { status: EventStatus.PENDING_REVIEW } }),
-    prisma.order.aggregate({
+    prisma.order.groupBy({
+      by: ["currency"],
       where: {
         status: {
           in: [
@@ -164,15 +188,19 @@ const admin = async () => {
       _sum: { total: true, serviceFee: true },
       _count: { id: true },
     }),
-    prisma.refund.aggregate({
+    prisma.refund.groupBy({
+      by: ["currency"],
       where: { status: "REFUNDED" },
       _sum: { approvedAmount: true },
       _count: { id: true },
     }),
     prisma.dispute.count({
-      where: { status: { in: ["OPEN", "ORGANIZER_RESPONDED", "UNDER_REVIEW"] } },
+      where: {
+        status: { in: ["OPEN", "ORGANIZER_RESPONDED", "UNDER_REVIEW"] },
+      },
     }),
-    prisma.payout.aggregate({
+    prisma.payout.groupBy({
+      by: ["currency"],
       where: { status: "PAID" },
       _sum: { netAmount: true },
       _count: { id: true },
@@ -186,14 +214,29 @@ const admin = async () => {
     activeOrganizers,
     publishedEvents,
     pendingEventReviews: pendingEvents,
-    ticketSalesVolume: sales._count.id,
-    grossMerchandiseValue: Number(sales._sum.total ?? 0),
-    platformServiceFeeRevenue: Number(sales._sum.serviceFee ?? 0),
-    refundVolume: refunds._count.id,
-    refundAmount: Number(refunds._sum.approvedAmount ?? 0),
+    ticketSalesVolume: sales.reduce((sum, row) => sum + row._count.id, 0),
+    grossMerchandiseValueByCurrency: moneyMap(
+      sales as MoneyGroup[],
+      "total",
+    ),
+    platformServiceFeeRevenueByCurrency: moneyMap(
+      sales as MoneyGroup[],
+      "serviceFee",
+    ),
+    refundVolume: refunds.reduce((sum, row) => sum + row._count.id, 0),
+    refundAmountByCurrency: moneyMap(
+      refunds as MoneyGroup[],
+      "approvedAmount",
+    ),
     openDisputes,
-    completedPayouts: paidPayouts._count.id,
-    payoutAmount: Number(paidPayouts._sum.netAmount ?? 0),
+    completedPayouts: paidPayouts.reduce(
+      (sum, row) => sum + row._count.id,
+      0,
+    ),
+    payoutAmountByCurrency: moneyMap(
+      paidPayouts as MoneyGroup[],
+      "netAmount",
+    ),
     suspendedEvents,
   };
 };

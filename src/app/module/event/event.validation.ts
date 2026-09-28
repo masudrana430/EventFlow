@@ -32,6 +32,7 @@ export const createEventSchema = z.object({
   refundDeadline: dateString.optional(),
   refundPercentage: z.number().int().min(0).max(100).optional(),
   capacity: z.number().int().positive(),
+  currency: z.enum(["BDT", "USD"]).default("BDT"),
   publishAt: dateString.optional(),
 });
 

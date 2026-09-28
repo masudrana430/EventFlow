@@ -62,3 +62,17 @@ npm run verify:api-contract
 - Multipart requests require selecting local files in Postman.
 - Sample event dates in request bodies must remain in the future.
 - The Production environment points to `https://eventflow-ln9q.onrender.com/api/v1`.
+
+
+## Multi-currency rules
+
+EventFlow supports event currencies `BDT` and `USD`.
+
+- Each event has exactly one currency.
+- Ticket prices, fixed promo values, orders, payments, refunds, and payouts inherit the event currency.
+- Event currency cannot be changed after ticket types are created.
+- `UDDOKTAPAY_CURRENCY` must match the active Paymently/UddoktaPay invoice/base currency.
+- UddoktaPay Create Charge accepts an amount but no currency field, so EventFlow blocks paid checkout when the event currency does not match `UDDOKTAPAY_CURRENCY`.
+- For BDT testing: configure the Paymently panel/invoice currency as BDT and set `UDDOKTAPAY_CURRENCY=BDT`.
+- For USD/Stripe testing: configure the Paymently panel/invoice currency as USD and set `UDDOKTAPAY_CURRENCY=USD`.
+- Payment verification compares the provider amount to the order total and validates the currency preserved in payment metadata.

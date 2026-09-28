@@ -1,5 +1,6 @@
 import httpStatus from "http-status";
 import {
+  Currency,
   EventStatus,
   OrganizerApprovalStatus,
   UserRole,
@@ -33,6 +34,7 @@ type EventInput = {
   refundDeadline?: string;
   refundPercentage?: number;
   capacity: number;
+  currency: Currency;
   publishAt?: string;
 };
 
@@ -137,6 +139,17 @@ const update = async (
     throw new AppError(httpStatus.CONFLICT, "This event cannot be edited in its current status");
   }
 
+  if (
+    payload.currency &&
+    payload.currency !== event.currency &&
+    event.ticketTypes.length > 0
+  ) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      "Event currency cannot be changed after ticket types are created",
+    );
+  }
+
   const hasSales = event.ticketTypes.some((ticketType) => ticketType.soldQuantity > 0);
 
   if (hasSales) {
@@ -198,6 +211,7 @@ const update = async (
     refundPercentage:
       payload.refundPercentage ?? event.refundPercentage ?? undefined,
     capacity: payload.capacity ?? event.capacity,
+    currency: payload.currency ?? event.currency,
     publishAt: payload.publishAt ?? event.publishAt?.toISOString(),
   };
 
@@ -492,6 +506,7 @@ const cancel = async (
           reason: `Event cancelled: ${reason}`,
           requestedAmount: order.total,
           approvedAmount: order.total,
+          currency: order.currency,
           status: "PROCESSING",
           decisionByUserId: userId,
           decisionReason:
