@@ -131,7 +131,7 @@ model Payment {
 
   status   PaymentStatus @default(PENDING)
   amount   Decimal @db.Decimal(12, 2)
-  currency String  @default("BDT")
+  currency Currency @default(BDT)
 
   paymentMethod String?
   payerEmail    String?
