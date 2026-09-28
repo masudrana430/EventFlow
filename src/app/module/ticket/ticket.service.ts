@@ -73,6 +73,9 @@ const generatePdf = async (userId: string, ticketId: string) => {
   doc.fontSize(11);
   doc.text(`Ticket Number: ${ticket.ticketNumber}`);
   doc.text(`Ticket Type: ${ticket.ticketType.name}`);
+  doc.text(
+    `Price: ${ticket.order.currency} ${Number(ticket.ticketType.price).toFixed(2)}`,
+  );
   doc.text(`Order: ${ticket.order.orderNumber}`);
   doc.text(`Venue: ${ticket.event.venueName}`);
   doc.text(`Address: ${ticket.event.venueAddress}`);
