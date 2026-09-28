@@ -121,6 +121,12 @@ const invite = async (
       where: { id: user.id },
       data: {
         name: payload.name,
+        password: await bcrypt.hash(
+          temporaryPassword,
+          config.bcrypt_salt_rounds,
+        ),
+        status: UserStatus.ACTIVE,
+        mustChangePassword: true,
         eventStaff: {
           update: {
             invitationStatus: StaffInvitationStatus.PENDING,
